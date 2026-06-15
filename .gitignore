@@ -1,0 +1,88 @@
+# --------------------------------------------------------------------
+# Python
+# --------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+MANIFEST
+
+# --------------------------------------------------------------------
+# Virtual environments
+# --------------------------------------------------------------------
+.venv/
+venv/
+env/
+.env
+.python-version
+
+# --------------------------------------------------------------------
+# Tooling caches
+# --------------------------------------------------------------------
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+.hypothesis/
+
+# --------------------------------------------------------------------
+# IDE / editor
+# --------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# --------------------------------------------------------------------
+# Notebooks (committed clean; nbstripout enforces this via pre-commit)
+# --------------------------------------------------------------------
+.ipynb_checkpoints/
+
+# --------------------------------------------------------------------
+# Scientific data, model artifacts, generated banks
+# Never commit binary data — it bloats the repo and breaks `git clone`.
+# Use external storage (HuggingFace Hub, S3, PhysioNet) instead.
+# --------------------------------------------------------------------
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+*.ckpt
+*.safetensors
+
+data/
+banks/
+checkpoints/
+runs/
+logs/
+mlruns/
+wandb/
+artifacts/
+
+# Allow tiny fixtures committed under tests/fixtures/ if needed:
+!tests/fixtures/**
+
+# --------------------------------------------------------------------
+# Build / docs
+# --------------------------------------------------------------------
+docs/_build/
+site/

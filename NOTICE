@@ -1,0 +1,24 @@
+myocard-package-name
+Copyright (c) 2026 Daniel Klein and contributors
+
+This product is part of the myocard-labs cardiac signal processing toolkit:
+  https://github.com/myocard-labs
+
+Licensed under the MIT License (see LICENSE).
+
+---------------------------------------------------------------------
+Third-party data sources
+---------------------------------------------------------------------
+
+Delete the lines below that don't apply to this specific package.
+Keep the lines for any external data the package reads, writes, or
+ships fixtures derived from.
+
+This software uses the Intracardiac Atrial Fibrillation Database (IAFDB)
+from PhysioNet, doi:10.13026/C23S33, distributed under the Open Data
+Commons Attribution License v1.0 (ODC-By v1.0). See:
+  https://physionet.org/content/iafdb/1.0.0/
+
+This software uses Finitewave, a Python framework for cardiac
+electrophysiology simulation, BSD-3-Clause licensed. See:
+  https://github.com/TiNezlobinsky/Finitewave
