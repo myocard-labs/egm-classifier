@@ -1,16 +1,17 @@
 # ---------------------------------------------------------------------------
-# pyproject.toml — myocard-labs python template
+# pyproject.toml — myocard-egm-classifier
 #
-# Find/replace before publishing:
-#   myocard-package-name   → PyPI distribution name (dash-separated, with myocard- prefix)
-#   myocard_package_name   → Python import name (underscore-separated)
-#   PACKAGE_DESCRIPTION    → one-line summary used by PyPI
-#   GITHUB_REPO_NAME       → bare repo name (no myocard- prefix)
+# 1D MobileViT binary fibrosis classifier for bipolar intracardiac EGM
+# traces. Phase 1 single-logit BCE head; consumes ClassifierBank-format
+# input from myocard-egm-data (which the producers, iafdb-pipeline and
+# synthetic-egm-pipeline, write). The model architecture is registry-
+# based so future heads (multi-class CE, regression MSE) and backbones
+# slot in without changing the training loop's signature.
 #
-# Convention recap (LOCKED-IN 2026-06-13, see intracardiac-platform/project/refactor_checklist.md):
-#   GitHub repo  : egm-contracts                  (bare)
-#   PyPI dist    : myocard-egm-contracts          (myocard- prefix)
-#   Import name  : myocard_egm_contracts          (underscore)
+# Convention recap:
+#   GitHub repo  : egm-classifier                  (bare)
+#   PyPI dist    : myocard-egm-classifier          (myocard- prefix)
+#   Import name  : myocard_egm_classifier          (underscore)
 # ---------------------------------------------------------------------------
 
 [build-system]
@@ -18,16 +19,27 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "myocard-package-name"
-version = "0.1.0"
-description = "PACKAGE_DESCRIPTION"
+name = "myocard-egm-classifier"
+version = "0.3.0"
+description = "1D MobileViT classifier for bipolar intracardiac EGM traces. Consumes ClassifierBank-format input from myocard-egm-data; trains a binary fibrotic-vs-healthy head."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 authors = [
   { name = "Daniel Klein", email = "daniel.anthony.klein.88@gmail.com" },
 ]
-keywords = ["cardiac", "electrophysiology", "signal-processing", "egm"]
+keywords = [
+  "cardiac",
+  "electrophysiology",
+  "signal-processing",
+  "egm",
+  "intracardiac",
+  "atrial-fibrillation",
+  "fibrosis",
+  "mobilevit",
+  "pytorch",
+  "machine-learning",
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
@@ -38,41 +50,82 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 
+# Runtime deps. Bank I/O + dataset/split/augmentation comes from
+# myocard-egm-data; the legacy data/ subpackage is gone. h5py is NOT
+# a direct dep — egm-data carries it.
 dependencies = [
-  # Runtime deps go here. Keep this lean. Common floor: numpy + h5py.
-  # "numpy>=1.26",
-  # "h5py>=3.10",
+  "myocard-egm-contracts @ git+https://github.com/myocard-labs/egm-contracts.git@v0.3.0",
+  "myocard-egm-data[torch] @ git+https://github.com/myocard-labs/egm-data.git@v0.3.2",
+  "torch>=2.1",
+  # Metrics primitives (BinaryAUROC, BinaryAccuracy, BinaryStatScores,
+  # BinaryCalibrationError, ...). We deliberately use torchmetrics' batch-
+  # closed-form implementations rather than hand-rolling sigmoid + ROC +
+  # ECE — keeps the metrics layer small and well-tested.
+  "torchmetrics>=1.4",
+  # numpy 2.5+ ships type stubs that use PEP 695 "type X = Y" alias
+  # syntax, which mypy refuses to parse under ``python_version = "3.10"``
+  # (the version we type-check against to keep 3.10 runtime support).
+  # Cap below 2.5 until either mypy accepts the syntax under 3.10 or we
+  # bump the type-check target to 3.12. Runtime 1.26..2.4.x is the
+  # tested range across the polyrepo.
+  "numpy>=1.26,<2.5",
+  "pyyaml>=6.0",
+  "tqdm>=4.65",
 ]
 
 [project.optional-dependencies]
+# ONNX export path. Kept optional so training images don't pull the
+# export toolchain.
+onnx = [
+  "onnx>=1.15",
+  "onnxruntime>=1.17",
+]
 dev = [
   "pytest>=8.0",
   "pytest-cov>=5.0",
-  "ruff>=0.6.0",
-  "mypy>=1.10",
+  # ruff and mypy pinned to exact versions (matching the rest of the
+  # myocard-labs stack) so local dev, CI, and the pre-commit hook all
+  # run the same binary. Bumping ruff or mypy means updating this line,
+  # .pre-commit-config.yaml, and ci.yml together.
+  "ruff==0.15.17",
+  "mypy==2.1.0",
   "pre-commit>=3.7",
   "nbstripout>=0.7",
+  "types-PyYAML>=6.0",
 ]
 
 [project.urls]
-Homepage      = "https://github.com/myocard-labs/GITHUB_REPO_NAME"
-Repository    = "https://github.com/myocard-labs/GITHUB_REPO_NAME"
-Issues        = "https://github.com/myocard-labs/GITHUB_REPO_NAME/issues"
+Homepage      = "https://github.com/myocard-labs/egm-classifier"
+Repository    = "https://github.com/myocard-labs/egm-classifier"
+Issues        = "https://github.com/myocard-labs/egm-classifier/issues"
 Organization  = "https://github.com/myocard-labs"
 
-# Optional CLI entry points — uncomment + edit when the package ships commands.
-# [project.scripts]
-# myocard-foo = "myocard_package_name.cli:main"
+[project.scripts]
+egm-class-train  = "myocard_egm_classifier.cli.train_cmd:main"
+egm-class-eval   = "myocard_egm_classifier.cli.eval_cmd:main"
+egm-class-export = "myocard_egm_classifier.cli.export_cmd:main"
 
 # ---------------------------------------------------------------------------
 # Hatch
 # ---------------------------------------------------------------------------
 
+# Hatchling refuses direct URL references in dependencies by default; we
+# need it during pre-1.0 iteration so we can pin the egm-* siblings to
+# git tags. Drop this once everything ships on (Test)PyPI.
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
-packages = ["src/myocard_package_name"]
+packages = ["src/myocard_egm_classifier"]
+# Ship py.typed so downstream consumers (and CI mypy) can type-check
+# imports from this package without an ignore-missing-imports override.
+artifacts = [
+  "src/myocard_egm_classifier/py.typed",
+]
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -107,11 +160,23 @@ select = [
 ]
 ignore = [
   "E501",  # line length handled by formatter
+  # ML-code-friendly carve-outs (matching the legacy egm_classifier
+  # convention; same scientific-naming rationale).
+  "N803",  # argument names like Hz, mV
+  "N806",  # variable names like X, W (matrices)
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["B011"]
 "__init__.py"   = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["myocard_egm_classifier"]
+known-third-party = [
+  "myocard_egm_contracts",
+  "myocard_egm_data",
+  "torch",
+]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -132,12 +197,15 @@ addopts = [
 ]
 filterwarnings = [
   "error",
-  # Add per-package allowlist below as needed, e.g.:
-  # "ignore::DeprecationWarning:some_third_party_lib",
+  # torch + numpy occasionally surface harmless deprecation/user warnings;
+  # let them through rather than crash the suite on third-party churn.
+  "ignore::DeprecationWarning",
+  "ignore::PendingDeprecationWarning",
+  "ignore::UserWarning",
 ]
 
 [tool.coverage.run]
-source = ["src/myocard_package_name"]
+source = ["src/myocard_egm_classifier"]
 branch = true
 
 [tool.coverage.report]
@@ -161,17 +229,25 @@ warn_unused_ignores = true
 disallow_untyped_defs = true
 no_implicit_optional = true
 show_error_codes = true
-files = ["src", "tests"]
+files = ["src"]
 
-# Per-module overrides for libraries without type stubs.
-# Uncomment + edit when the package starts importing one of these.
-# Listing them here when the imports aren't present triggers
-# `warn_unused_configs` and clutters the mypy output.
-#
+# torch + tqdm + onnx / onnxruntime ship without complete inline stubs;
+# ignore-missing silences these third-party hops without losing strict
+# checking on our own code. myocard-egm-contracts and myocard-egm-data
+# both ship py.typed and are NOT in this override list.
+[[tool.mypy.overrides]]
+module = [
+  "torch.*",
+  "tqdm.*",
+]
+ignore_missing_imports = true
+
+# Activate the onnx / onnxruntime override once export/onnx_export.py
+# imports them — until then, strict mypy flags unused overrides under
+# ``warn_unused_configs``.
 # [[tool.mypy.overrides]]
 # module = [
-#   "h5py.*",
-#   "scipy.*",
-#   "matplotlib.*",
+#   "onnx.*",
+#   "onnxruntime.*",
 # ]
 # ignore_missing_imports = true
