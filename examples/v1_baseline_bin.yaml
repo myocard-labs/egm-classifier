@@ -1,0 +1,56 @@
+# egm-classifier — Phase 1 baseline (1D MobileViT, width 1.0).
+#
+# Canonical run record. Paths resolve relative to THIS file's directory
+# (egm-classifier/examples/). Every field has a default in
+# myocard_egm_classifier.cli._config, so a config only needs to state
+# values that differ from the v1 baseline.
+
+model:
+  width_multiplier: 1.0        # 0.5 small / 1.0 baseline / 1.5 large (design doc Sec. 8)
+  num_classes: 1               # 1 => single-logit BCE binary head (Sec. 6 + 12)
+  in_channels: 1               # bipolar EGM = single channel
+  input_length: 512            # zero-pad / crop the bank trace to T=512 (Sec. 7)
+  stochastic_depth: 0.1        # max DropPath, graded 0 -> 0.1 across depth (Sec. 10)
+  head_expansion_channels: 320 # x width_multiplier (Sec. 6)
+  head_dropout: 0.1
+
+data:
+  # Path to a ClassifierBank HDF5 written by synthetic-egm-pipeline or
+  # iafdb-pipeline. Labels are baked in at conversion time; the
+  # classifier does not re-threshold.
+  bank: ../banks/synthegm_v1_hybrid_small.classifier.h5
+  batch_size: 64
+  num_workers: 0
+  znorm: true                  # per-trace z-score normalization (Sec. 11)
+  znorm_eps: 1.0e-7            # floor on per-trace std (avoid div-by-zero)
+  augment_train: true          # time-shift on the train split (Sec. 12)
+  max_gain: 0.0                # gain is a no-op under z-norm; leave disabled
+  max_shift_frac: 0.10         # +/-10% random time shift
+  split_fractions: [0.8, 0.1, 0.1]  # train/val/test, patient-aware (Sec. 13)
+  split_seed: 0
+  # Per-patient stratification strategy for the patient-aware split.
+  # Default (any_positive) gives one bit per patient (1 if any trace is
+  # positive). Works on both global-density and local-density banks.
+  # Switch to binned_density when an unbalanced local-density bank
+  # trips egm-data's "single-class val/test" warning:
+  #   split_strategy:
+  #     type: binned_density
+  #     n_bins: 3
+  split_strategy:
+    type: binned_density
+  pin_memory: false            # set true when running on CUDA
+
+train:
+  epochs: 60
+  lr: 0.0003                   # AdamW base LR (Sec. 12)
+  weight_decay: 0.05
+  warmup_frac: 0.05            # linear warmup over 5% of steps, then cosine -> 0
+  grad_clip_norm: 1.0
+  amp: false                   # set true on a GPU for mixed precision
+  amp_dtype: bf16
+  seed: 42
+  select_metric: auroc         # checkpoint on best val AUROC
+
+output:
+  checkpoint_dir: ../checkpoints/v1_baseline_bin
+  description: "Phase 1 baseline — 1D MobileViT width=1.0, synthetic clean bank, patient-aware split."
