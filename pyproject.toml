@@ -60,6 +60,10 @@ classifiers = [
 dependencies = [
   "myocard-egm-contracts @ git+https://github.com/myocard-labs/egm-contracts.git@v0.4.0",
   "myocard-egm-data[torch] @ git+https://github.com/myocard-labs/egm-data.git@v0.3.3",
+  # myocard-egm-signal ships the temperature-scaling primitive that
+  # the export CLI's calibration step calls into. v0.2.0 added the
+  # model/temperature_scaling module.
+  "myocard-egm-signal @ git+https://github.com/myocard-labs/egm-signal.git@v0.2.0",
   "torch>=2.1",
   # Metrics primitives (BinaryAUROC, BinaryAccuracy, BinaryStatScores,
   # BinaryCalibrationError, ...). We deliberately use torchmetrics' batch-
@@ -83,6 +87,11 @@ dependencies = [
 onnx = [
   "onnx>=1.15",
   "onnxruntime>=1.17",
+  # onnxscript is a transitive dependency of torch.onnx.export under
+  # PyTorch >= 2.5 (the dynamo exporter pulls it in). Pin it here so the
+  # ``[onnx]`` extra is self-sufficient — installing it alone is enough
+  # to make ``egm-class-export`` work.
+  "onnxscript>=0.1",
 ]
 dev = [
   "pytest>=8.0",
@@ -242,12 +251,12 @@ module = [
 ]
 ignore_missing_imports = true
 
-# Activate the onnx / onnxruntime override once export/onnx_export.py
-# imports them — until then, strict mypy flags unused overrides under
-# ``warn_unused_configs``.
-# [[tool.mypy.overrides]]
-# module = [
-#   "onnx.*",
-#   "onnxruntime.*",
-# ]
-# ignore_missing_imports = true
+# onnx / onnxruntime ship without complete inline stubs; same treatment
+# as the torch override above. ``export/onnx_export.py`` consumes these.
+[[tool.mypy.overrides]]
+module = [
+  "onnx.*",
+  "onnxruntime.*",
+  "onnxscript.*",
+]
+ignore_missing_imports = true

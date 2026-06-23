@@ -1,0 +1,73 @@
+# egm-classifier — Phase 1 ONNX export config.
+#
+# Drives ``egm-class-export``. Paths resolve relative to THIS file's
+# directory (egm-classifier/examples/). Most fields have defaults in
+# myocard_egm_classifier.cli._export_config; the required ones are
+# called out explicitly below.
+#
+# The export produces a pair of files under ``output.dir``:
+#   - ``<output.name>.onnx`` — the calibrated ONNX graph
+#     (with temperature T baked in: graph emits ``logit / T``)
+#   - ``<output.name>.model_metadata.json`` — the sidecar with
+#     preprocessing constants, decision threshold, class labels,
+#     and training provenance for the deployment runtime.
+
+# REQUIRED: path to a training checkpoint (egm-class-train output).
+checkpoint: ../checkpoints/v1_baseline_bin/best.pt
+
+# Calibration block.
+# When ``calibration.bank`` is set, the export fits a temperature
+# scalar T against the bank's (logits, labels) pairs and bakes
+# ``logit / T`` into the ONNX graph. When ``calibration.bank`` is
+# omitted (or set to null), the export ships with T = 1.0 — raw
+# logits, no calibration. The other fields are DataLoader knobs and
+# only matter when ``bank`` is set.
+calibration:
+  bank: ../banks/synthegm_v1_hybrid_small.classifier.h5
+  batch_size: 64
+  num_workers: 0
+  pin_memory: false
+
+# Preprocessing constants for the metadata sidecar.
+# These describe what the deployment runtime applies to each incoming
+# trace BEFORE invoking the model, and they must match what the model
+# was trained with. The bank can't tell us these — the bandpass filter
+# isn't preserved in ClassifierBank, and aggregated banks may carry
+# mixed sample rates — so we take everything from this YAML.
+preprocessing:
+  fs_hz: 1000.0                  # REQUIRED — training-time sampling rate
+  bandpass_hz: [30.0, 250.0]     # REQUIRED — [low, high] in Hz, applied at
+                                  # training time
+
+  normalization_scheme: zscore   # 'zscore' (default) or 'zero2one'.
+                                  # ONE source of truth — used by both the
+                                  # calibration loader and recorded in the
+                                  # metadata sidecar. MUST match what the
+                                  # model was trained with; train + eval
+                                  # currently only emit zscore checkpoints.
+  normalization_eps: 1.0e-7      # floor on the per-trace divisor
+                                  # (std for zscore; max-min for zero2one)
+
+output:
+  dir: ../exports/v1_baseline_bin
+  name: best                     # produces best.onnx + best.model_metadata.json
+
+# ONNX operator-set version pinned at export time. Downstream runtimes
+# (ONNX Runtime, TensorRT) must support this opset. 18 is the modern
+# stable default; it covers every op MobileViT1D uses (Conv1d,
+# BatchNorm1d, LayerNorm, SiLU, GELU, MultiheadAttention) and is
+# broadly supported across current ONNX Runtime + TensorRT 8.6+/10
+# releases. Setting < 18 triggers an auto-downconvert pass under
+# current PyTorch that currently fails on Squeeze/Unsqueeze
+# axes-attribute conversion, so don't lower this without a reason.
+opset: 18
+
+# Decision-rule constants for the metadata sidecar.
+# ``threshold`` is the decision threshold the deployment runtime
+# applies to P(positive); 0.5 matches the eval CLI default and is
+# invariant under any positive temperature scaling. ``class_labels``
+# is the human-readable name per output index; the v1 binary head
+# uses index 0 = healthy, index 1 = fibrotic.
+decision:
+  threshold: 0.5
+  class_labels: [healthy, fibrotic]
