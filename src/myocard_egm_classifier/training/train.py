@@ -31,12 +31,12 @@ from typing import Any
 import numpy as np
 import torch
 from myocard_egm_data.datasets import LoaderBundle
-from numpy.typing import NDArray
 from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from myocard_egm_classifier.training.metrics import binary_metrics
+from myocard_egm_classifier.inference_helpers import collect_logits
+from myocard_egm_classifier.metrics import binary_metrics
 from myocard_egm_classifier.training.reporting import EpochRecord, make_epoch_record
 
 
@@ -162,27 +162,6 @@ def train_one_epoch(
             bar.set_postfix(loss=f"{running_loss / n_batches:.3f}", lr=f"{lr:.2e}")
 
     return running_loss / max(1, n_batches), lr, global_step
-
-
-@torch.no_grad()
-def collect_logits(
-    model: nn.Module, loader: DataLoader[Any], device: torch.device
-) -> tuple[NDArray[np.float32], NDArray[np.int64]]:
-    """Run the model over a loader; return ``(logits [N, C], labels [N])``."""
-    model.eval()
-    all_logits: list[NDArray[np.float32]] = []
-    all_labels: list[NDArray[np.int64]] = []
-    for signals, targets in loader:
-        signals = signals.to(device, non_blocking=True)
-        logits = model(signals).float().cpu().numpy()
-        all_logits.append(logits)
-        all_labels.append(targets.cpu().numpy())
-    if not all_logits:
-        return np.zeros((0, 1), dtype=np.float32), np.zeros((0,), dtype=np.int64)
-    return (
-        np.concatenate(all_logits, axis=0),
-        np.concatenate(all_labels, axis=0).reshape(-1).astype(np.int64),
-    )
 
 
 def evaluate(

@@ -23,7 +23,8 @@ from myocard_egm_data.records import (
     load_training_run_record,
 )
 
-from myocard_egm_classifier.training import binary_metrics, make_epoch_record, write_run
+from myocard_egm_classifier.metrics import binary_metrics
+from myocard_egm_classifier.training import make_epoch_record, write_run
 
 
 def _val_metrics_with(auroc: float) -> dict[str, Any]:

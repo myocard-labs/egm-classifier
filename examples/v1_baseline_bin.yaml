@@ -2,7 +2,7 @@
 #
 # Canonical run record. Paths resolve relative to THIS file's directory
 # (egm-classifier/examples/). Every field has a default in
-# myocard_egm_classifier.cli._config, so a config only needs to state
+# myocard_egm_classifier.cli._train_config, so a config only needs to state
 # values that differ from the v1 baseline.
 
 model:

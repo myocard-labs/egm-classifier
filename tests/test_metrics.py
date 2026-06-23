@@ -23,7 +23,7 @@ import numpy as np
 import pytest
 from myocard_egm_data.records import ReliabilityBin
 
-from myocard_egm_classifier.training import binary_metrics
+from myocard_egm_classifier.metrics import binary_metrics
 
 
 def _perfect_logits(labels: np.ndarray) -> np.ndarray:
