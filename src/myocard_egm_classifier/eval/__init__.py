@@ -1,19 +1,51 @@
-"""Evaluation against ClassifierBank-format inputs.
+"""Evaluation against labeled ClassifierBank inputs.
 
-Transparently handles two cases:
+PR B ships only the inference + prediction-stamping path. The CLI
+(``egm-class-eval`` in :mod:`myocard_egm_classifier.cli.eval_cmd`)
+loads a trained checkpoint, runs inference over every trace of a
+**labeled** ClassifierBank, writes a sibling ``<stem>_pred.cbank.h5``
+with :class:`ClassifierPrediction` populated on each trace, and
+prints scalar metrics to stdout. No calibration, no metrics file, no
+new schemas — see ``project/architecture.md`` for the design rationale.
 
-- **Labeled banks** (synthetic clean, synthetic hybrid) — emits the
-  usual classification metrics (accuracy, AUROC, ECE, per-class
-  precision/recall/F1) plus per-trace predictions.
-- **Unlabeled / single-class banks** (e.g. IAFDB-only with the
-  all-healthy labeling assumption) — emits per-trace predictions +
-  confidence-calibration plots only. No accuracy/AUROC. The CLI's
-  output is explicit about which kind of eval ran.
+Module layout
+-------------
 
-See ``docs/usage.md`` and ``project/architecture.md`` for the
-IAFDB epistemic catch-22 that motivates this split — using IAFDB as
-ground-truth test data is logically circular because we don't have
-trustworthy fibrosis labels for it.
+- :mod:`.dataset` — :func:`build_eval_dataset` (sequential, no-augment
+  :class:`EGMTraceDataset` over every trace). The logit-collection
+  step itself is the top-level
+  :func:`myocard_egm_classifier.inference_helpers.collect_logits`
+  (shared with the per-epoch evaluator inside training).
+- :mod:`.predictions` — :func:`populate_predictions` (stamps
+  :class:`ClassifierPrediction` onto every trace from the model's
+  logits) and :func:`default_predictions_bank_path` (derives the
+  sibling ``_pred.cbank.h5`` output path).
+
+The CLI module (``cli/eval_cmd.py``) is intentionally thin: argparse,
+config loading, and the top-level orchestration that wires these
+helpers together.
+
+Unlabeled-bank inference (e.g. IAFDB-only) is **not** supported. The
+patient-substrate ground truth required to interpret eval metrics
+doesn't exist for IAFDB data — see the
+``project_iafdb_eval_catch22`` memory for context. If a downstream
+tool needs predictions on unlabeled data, it can call the model from
+a notebook directly; the CLI is reserved for labeled-bank eval.
+
+Future additions (calibration application at eval time, per-cohort
+slicing, multi-class heads) land here as new modules.
 """
 
 from __future__ import annotations
+
+from myocard_egm_classifier.eval.dataset import build_eval_dataset
+from myocard_egm_classifier.eval.predictions import (
+    default_predictions_bank_path,
+    populate_predictions,
+)
+
+__all__ = [
+    "build_eval_dataset",
+    "default_predictions_bank_path",
+    "populate_predictions",
+]

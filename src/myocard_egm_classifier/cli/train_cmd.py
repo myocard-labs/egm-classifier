@@ -42,16 +42,19 @@ from typing import Any
 from myocard_egm_data.banks import load_classifier_bank
 from myocard_egm_data.datasets import build_dataloaders
 
-from myocard_egm_classifier.cli._common import select_device, set_seed
-from myocard_egm_classifier.cli._config import (
+from myocard_egm_classifier.cli._common import (
     ConfigError,
+    load_yaml,
+    select_device,
+    set_seed,
+)
+from myocard_egm_classifier.cli._train_config import (
     TrainCLIOverrides,
     TrainExperimentConfig,
     apply_train_overrides,
     build_model_from_config,
     build_train_config,
     experiment_config_to_dict,
-    load_yaml,
     loader_kwargs_from_config,
     model_meta_from_config,
     to_train_runtime_config,

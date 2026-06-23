@@ -23,13 +23,12 @@ from pathlib import Path
 import pytest
 from myocard_egm_data.splits import AnyPositiveStrategy, BinnedDensityStrategy
 
-from myocard_egm_classifier.cli._config import (
-    ConfigError,
+from myocard_egm_classifier.cli._common import ConfigError, load_yaml
+from myocard_egm_classifier.cli._train_config import (
     TrainCLIOverrides,
     apply_train_overrides,
     build_train_config,
     experiment_config_to_dict,
-    load_yaml,
     loader_kwargs_from_config,
     to_strategy,
     to_train_runtime_config,

@@ -1,0 +1,29 @@
+# egm-classifier — Phase 1 eval against a labeled ClassifierBank.
+#
+# Paths resolve relative to THIS file's directory
+# (egm-classifier/examples/).
+#
+# Note: no `model:` block. The architecture is rebuilt from the
+# checkpoint's embedded `model_meta`. The checkpoint is the source of
+# truth for "what model is being evaluated."
+
+checkpoint: ../checkpoints/v1_baseline_bin/best.pt
+
+data:
+  # Labeled ClassifierBank. The eval CLI does not support unlabeled
+  # banks (see project_iafdb_eval_catch22).
+  bank: ../banks/synthegm_v1_hybrid_small.classifier.h5
+  batch_size: 64
+  num_workers: 0
+  znorm: true                   # must match the training-time setting
+  znorm_eps: 1.0e-7
+
+# Decision threshold for label_pred. 0.5 is the default. Override
+# when downstream tooling (clinical flagging, calibrated analysis)
+# wants a different cut.
+threshold: 0.5
+
+output:
+  # Sibling predictions bank. Omit to derive automatically:
+  # <input_stem>_pred.cbank.h5 next to the input.
+  predictions_bank: ../predictions/v1_baseline_test_pred.cbank.h5

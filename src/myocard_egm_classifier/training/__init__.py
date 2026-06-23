@@ -1,32 +1,29 @@
-"""Training loop + metrics + reporting.
+"""Training loop + reporting orchestration.
 
-The metrics layer wraps ``torchmetrics`` primitives (BinaryAUROC,
-BinaryAccuracy, BinaryCalibrationError, ...) into the shared
-``val_metrics`` dict shape the trainer + reporting layer expect.
-Reliability bins are emitted as typed
-:class:`myocard_egm_data.records.ReliabilityBin` instances (the
-contracts' Pydantic model, re-exported via egm-data) so the boundary
-into :func:`make_epoch_record` is dict-free.
+This subpackage owns only the training-loop math (optimizer step,
+cosine warmup schedule, per-epoch evaluate-on-val) and the end-of-run
+reporting orchestration. Two helpers used by training but **also** by
+the eval CLI live at the package top level:
 
-The reporting layer delegates ``run.json`` + ``metrics.csv`` writing
-to ``myocard-egm-data.records``; this subpackage owns only the
-training-time math plus the orchestration that calls the typed
-writers at end-of-run.
+- :func:`myocard_egm_classifier.metrics.binary_metrics` — the
+  metric bundle computed from logits + labels.
+- :func:`myocard_egm_classifier.inference_helpers.collect_logits` —
+  runs a model over a DataLoader and returns logits + labels.
 
-Public API
-----------
+Both are re-exported here for back-compat with code that historically
+imported them from ``training``; new call sites should import from
+the top-level modules directly.
+
+Public API (training-specific):
+
 - :class:`TrainConfig` — hyperparameters for one run.
-- :func:`train`, :func:`train_one_epoch` — training loop entrypoints.
-- :func:`evaluate`, :func:`collect_logits` — eval-mode helpers, reused
-  by the eval CLI.
+- :func:`train`, :func:`train_one_epoch` — training loop entry points.
+- :func:`evaluate` — per-epoch eval (uses ``collect_logits`` +
+  ``binary_metrics`` internally; also computes the BCE/CE loss).
 - :func:`cosine_warmup_lr` — the scheduler primitive.
-- :func:`binary_metrics` — metrics computed via torchmetrics; returned
-  in the dict shape the trainer and the run-record writers both
-  consume.
 - :class:`EpochRecord` — re-exported from
-  ``myocard-egm-data.records`` (which re-exports it from
-  ``myocard-egm-contracts``); the typed per-epoch record the trainer
-  produces and the run-record writer consumes.
+  ``myocard-egm-data.records``; the typed per-epoch record the
+  trainer produces and the run-record writer consumes.
 - :func:`make_epoch_record` — re-exported from
   ``myocard-egm-data.records``; translates trainer state into a typed
   :class:`EpochRecord`.
@@ -36,7 +33,10 @@ Public API
 
 from __future__ import annotations
 
-from myocard_egm_classifier.training.metrics import binary_metrics
+# Re-exports of top-level helpers (used by both training + eval) for
+# back-compat with code that historically imported them from training.
+from myocard_egm_classifier.inference_helpers import collect_logits
+from myocard_egm_classifier.metrics import binary_metrics
 from myocard_egm_classifier.training.reporting import (
     EpochRecord,
     make_epoch_record,
@@ -44,7 +44,6 @@ from myocard_egm_classifier.training.reporting import (
 )
 from myocard_egm_classifier.training.train import (
     TrainConfig,
-    collect_logits,
     cosine_warmup_lr,
     evaluate,
     train,

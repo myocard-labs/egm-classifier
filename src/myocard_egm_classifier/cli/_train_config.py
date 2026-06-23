@@ -1,23 +1,40 @@
-"""YAML config loading + per-CLI typed config builders.
+"""Train-CLI typed config + YAML builders.
 
-Three CLIs share this module:
+Consumed only by ``egm-class-train`` (via :mod:`.train_cmd`). The
+generic YAML/config helpers (``ConfigError``, ``load_yaml``,
+``_optional``, ``_resolve_path``, ``_reject_unknown_keys``) live in
+:mod:`._common` because they're also used by :mod:`._eval_config`
+(and eventually ``_export_config``).
 
-- ``egm-class-train`` consumes a YAML config that pins every knob of
-  one training run (model, data, train, output).
-- ``egm-class-eval`` consumes a smaller YAML that pins one evaluation
-  pass against a trained checkpoint and a labeled ClassifierBank
-  (lands in PR B).
-- ``egm-class-export`` consumes a YAML that pins one ONNX export
-  (lands in PR C).
+The model triad — :class:`ModelCLIConfig`,
+:func:`build_model_from_config`, :func:`model_meta_from_config` —
+lives here rather than in ``_common`` because it's a train-time
+concept: the YAML ``model:`` block deserializes into
+``ModelCLIConfig``, which the trainer uses to build the architecture
+and then serializes back out as the ``model_meta`` dict embedded in
+the checkpoint. Eval and export consume that meta dict directly via
+:func:`._common.build_model_from_meta` and never need to round-trip
+through ``ModelCLIConfig``.
 
-Shared helpers (``ConfigError``, ``load_yaml``, ``_required``,
-``_optional``, ``_resolve_path``) mirror the synthetic-egm-pipeline +
-iafdb-pipeline convention: every path resolves against the config
-file's directory; missing required fields raise a precise error; the
-typed dataclasses are frozen so a built config never silently mutates.
+What lives in this module:
 
-Schema for each YAML is documented in the example configs under
-``examples/``.
+- :class:`ModelCLIConfig` + :func:`build_model_from_config` +
+  :func:`model_meta_from_config` (train-side model triad).
+- The three train-side dataclasses :class:`DataCLIConfig`,
+  :class:`TrainCLIConfig`, :class:`OutputCLIConfig`, plus the bundled
+  :class:`TrainExperimentConfig`.
+- The per-block YAML builders and key-allowlists.
+- :class:`TrainCLIOverrides` + :func:`apply_train_overrides` for
+  argparse flags.
+- :func:`to_train_runtime_config` (config -> ``training.TrainConfig``).
+- :func:`loader_kwargs_from_config` (config -> egm-data
+  ``build_dataloaders`` kwargs, including the resolved patient
+  stratification strategy).
+- :func:`experiment_config_to_dict` (config -> JSON-serializable dict
+  for the ``run.json`` artifact's ``config`` block).
+- Plumbing for the patient-stratification ``split_strategy`` block:
+  :class:`SplitStrategyConfig` dataclass + :func:`to_strategy` builder.
+- :func:`_expect_fractions` (split-fraction validator; train-only).
 """
 
 from __future__ import annotations
@@ -26,13 +43,18 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-import yaml
 from myocard_egm_data.splits import (
     AnyPositiveStrategy,
     BinnedDensityStrategy,
     PatientStratificationStrategy,
 )
 
+from myocard_egm_classifier.cli._common import (
+    ConfigError,
+    _optional,
+    _reject_unknown_keys,
+    _resolve_path,
+)
 from myocard_egm_classifier.constants import (
     DEFAULT_AMP,
     DEFAULT_AMP_DTYPE,
@@ -64,80 +86,10 @@ from myocard_egm_classifier.constants import (
 from myocard_egm_classifier.models import BlockSpec, MobileViT1D, default_v1_blocks
 from myocard_egm_classifier.training import TrainConfig
 
-
-class ConfigError(ValueError):
-    """Raised when a config file is malformed or missing required keys."""
-
-
 # ---------------------------------------------------------------------------
-# Generic helpers
+# Generic helper that's only used here (kept out of _common since it
+# has no eval-side caller)
 # ---------------------------------------------------------------------------
-
-
-def load_yaml(path: Path | str) -> dict[str, Any]:
-    """Load a YAML file into a dict.
-
-    Resolves the parent path into the returned dict under
-    ``_config_dir`` so subsequent relative paths in the doc resolve
-    against the YAML's directory (same convention iafdb-pipeline and
-    synthetic-egm-pipeline use).
-    """
-    p = Path(path)
-    if not p.is_file():
-        raise ConfigError(f"Config file not found: {p}")
-    with p.open(encoding="utf-8") as f:
-        loaded = yaml.safe_load(f)
-    if not isinstance(loaded, dict):
-        raise ConfigError(f"Config {p} did not parse as a YAML mapping at the top level.")
-    loaded["_config_dir"] = p.parent.resolve()
-    return loaded
-
-
-def _required(doc: dict[str, Any], *path: str) -> Any:
-    """Walk ``path`` into the nested dict; raise on any missing key."""
-    node: Any = doc
-    for k in path:
-        if not isinstance(node, dict) or k not in node:
-            dotted = ".".join(path)
-            raise ConfigError(f"Required config field missing: {dotted}")
-        node = node[k]
-    return node
-
-
-def _optional(doc: dict[str, Any], *path: str, default: Any = None) -> Any:
-    """Walk ``path`` into the nested dict; return ``default`` if missing."""
-    node: Any = doc
-    for k in path:
-        if not isinstance(node, dict) or k not in node:
-            return default
-        node = node[k]
-    return node
-
-
-def _resolve_path(value: str | None, config_dir: Path) -> Path | None:
-    """Resolve a YAML-supplied path against the config file's dir.
-
-    ``None`` / empty string returns ``None``. Absolute paths pass
-    through; relative paths resolve against ``config_dir``.
-    """
-    if value is None or value == "":
-        return None
-    p = Path(value)
-    return p if p.is_absolute() else (config_dir / p).resolve()
-
-
-def _reject_unknown_keys(block: dict[str, Any], allowed: set[str], *, label: str) -> None:
-    """Loudly fail when a YAML block has typo'd or stale keys.
-
-    Catches things like ``model.with_multiplier`` vs ``width_multiplier``
-    at config-load time instead of silently dropping the override.
-    ``_config_dir`` is filtered out because :func:`load_yaml` stuffs it
-    into the top-level doc as a side channel.
-    """
-    keys = {k for k in block if k != "_config_dir"}
-    unknown = keys - allowed
-    if unknown:
-        raise ConfigError(f"Unknown keys in {label}: {sorted(unknown)}")
 
 
 def _expect_fractions(value: Any, *, field_path: str) -> tuple[float, float, float]:
@@ -153,7 +105,81 @@ def _expect_fractions(value: Any, *, field_path: str) -> tuple[float, float, flo
 
 
 # ---------------------------------------------------------------------------
-# train config — typed dataclasses
+# Model-side typed config (train-only; eval/export use the checkpoint's
+# model_meta dict directly via _common.build_model_from_meta)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ModelCLIConfig:
+    """Model-architecture knobs for one training run.
+
+    Deserialized from the YAML ``model:`` block by
+    :func:`_build_model_block`, materialized into a live
+    :class:`MobileViT1D` by :func:`build_model_from_config`, and
+    serialized as the embedded ``model_meta`` dict in the checkpoint by
+    :func:`model_meta_from_config`. Eval and export rebuild the model
+    directly from that meta dict (via
+    :func:`._common.build_model_from_meta`) and have no need for this
+    dataclass — so it lives in the train module, not in ``_common``.
+    """
+
+    width_multiplier: float = DEFAULT_WIDTH_MULTIPLIER
+    num_classes: int = DEFAULT_NUM_CLASSES
+    in_channels: int = DEFAULT_INPUT_CHANNELS
+    input_length: int = DEFAULT_INPUT_LENGTH
+    stochastic_depth: float = DEFAULT_STOCHASTIC_DEPTH
+    head_expansion_channels: int = DEFAULT_HEAD_EXPANSION_CHANNELS
+    head_dropout: float = DEFAULT_HEAD_DROPOUT
+    arch: str = "mobilevit_1d_v1"
+    blocks: tuple[BlockSpec, ...] | None = field(default=None)
+    """Explicit block list overrides the v1 default template (Sec. 9)."""
+
+    @property
+    def is_binary(self) -> bool:
+        return self.num_classes == 1
+
+
+def build_model_from_config(model_cfg: ModelCLIConfig) -> MobileViT1D:
+    """Construct the model described by a :class:`ModelCLIConfig`."""
+    if model_cfg.blocks is not None:
+        blocks = list(model_cfg.blocks)
+    else:
+        blocks = default_v1_blocks(
+            num_outputs=model_cfg.num_classes,
+            head_expansion_channels=model_cfg.head_expansion_channels,
+            head_dropout=model_cfg.head_dropout,
+        )
+    return MobileViT1D(
+        blocks=blocks,
+        width_multiplier=model_cfg.width_multiplier,
+        in_channels=model_cfg.in_channels,
+        stochastic_depth=model_cfg.stochastic_depth,
+    )
+
+
+def model_meta_from_config(model_cfg: ModelCLIConfig) -> dict[str, Any]:
+    """Architecture args to embed in a checkpoint for rebuild on eval/export.
+
+    Inverse of :func:`._common.build_model_from_meta`. Trainer calls
+    this once at checkpoint-save time; eval/export then call
+    ``build_model_from_meta`` against the embedded dict without ever
+    needing to materialize a :class:`ModelCLIConfig`.
+    """
+    return {
+        "width_multiplier": model_cfg.width_multiplier,
+        "num_classes": model_cfg.num_classes,
+        "in_channels": model_cfg.in_channels,
+        "input_length": model_cfg.input_length,
+        "stochastic_depth": model_cfg.stochastic_depth,
+        "head_expansion_channels": model_cfg.head_expansion_channels,
+        "head_dropout": model_cfg.head_dropout,
+        "arch": model_cfg.arch,
+    }
+
+
+# ---------------------------------------------------------------------------
+# split_strategy block
 # ---------------------------------------------------------------------------
 
 
@@ -194,24 +220,9 @@ class SplitStrategyConfig:
     n_bins: int = DEFAULT_BINNED_DENSITY_N_BINS
 
 
-@dataclass(frozen=True)
-class ModelCLIConfig:
-    """Model-architecture knobs for one training run."""
-
-    width_multiplier: float = DEFAULT_WIDTH_MULTIPLIER
-    num_classes: int = DEFAULT_NUM_CLASSES
-    in_channels: int = DEFAULT_INPUT_CHANNELS
-    input_length: int = DEFAULT_INPUT_LENGTH
-    stochastic_depth: float = DEFAULT_STOCHASTIC_DEPTH
-    head_expansion_channels: int = DEFAULT_HEAD_EXPANSION_CHANNELS
-    head_dropout: float = DEFAULT_HEAD_DROPOUT
-    arch: str = "mobilevit_1d_v1"
-    blocks: tuple[BlockSpec, ...] | None = None
-    """Explicit block list overrides the v1 default template (Sec. 9)."""
-
-    @property
-    def is_binary(self) -> bool:
-        return self.num_classes == 1
+# ---------------------------------------------------------------------------
+# Train-side typed dataclasses
+# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -272,8 +283,9 @@ class TrainExperimentConfig:
 
 
 # ---------------------------------------------------------------------------
-# train config — YAML builder
+# YAML builder
 # ---------------------------------------------------------------------------
+
 
 _MODEL_KEYS = {
     "width_multiplier",
@@ -300,8 +312,6 @@ _DATA_KEYS = {
     "split_strategy",
     "pin_memory",
 }
-_SPLIT_STRATEGY_TYPES = {"any_positive", "binned_density"}
-_SPLIT_STRATEGY_KEYS = {"type", "n_bins"}
 _TRAIN_KEYS = {
     "epochs",
     "lr",
@@ -315,6 +325,8 @@ _TRAIN_KEYS = {
 }
 _OUTPUT_KEYS = {"checkpoint_dir", "description"}
 _TOP_KEYS = {"model", "data", "train", "output"}
+_SPLIT_STRATEGY_TYPES = {"any_positive", "binned_density"}
+_SPLIT_STRATEGY_KEYS = {"type", "n_bins"}
 
 
 def build_train_config(doc: dict[str, Any]) -> TrainExperimentConfig:
@@ -404,44 +416,6 @@ def _build_data_block(block: dict[str, Any], config_dir: Path) -> DataCLIConfig:
     )
 
 
-def _build_split_strategy_block(block: dict[str, Any]) -> SplitStrategyConfig:
-    """Translate a ``data.split_strategy:`` YAML block into the typed config.
-
-    The discriminator key is ``type``; the strategy-specific parameter
-    set lives flat under the block (currently just ``n_bins`` for
-    ``binned_density``). Validates the type against the known set and
-    rejects unknown keys so config typos fail loudly rather than
-    silently using the default.
-    """
-    _reject_unknown_keys(block, _SPLIT_STRATEGY_KEYS, label="data.split_strategy")
-    strategy_type = str(block.get("type", DEFAULT_SPLIT_STRATEGY_TYPE))
-    if strategy_type not in _SPLIT_STRATEGY_TYPES:
-        raise ConfigError(
-            f"data.split_strategy.type must be one of "
-            f"{sorted(_SPLIT_STRATEGY_TYPES)}; got {strategy_type!r}."
-        )
-    n_bins = int(block.get("n_bins", DEFAULT_BINNED_DENSITY_N_BINS))
-    if strategy_type == "binned_density" and n_bins < 2:
-        raise ConfigError(
-            f"data.split_strategy.n_bins must be >= 2 for binned_density; got {n_bins}."
-        )
-    return SplitStrategyConfig(type=strategy_type, n_bins=n_bins)
-
-
-def to_strategy(cfg: SplitStrategyConfig) -> PatientStratificationStrategy:
-    """Instantiate the egm-data strategy class from the YAML config.
-
-    Single registry point for type → class dispatch: adding a new
-    strategy means one new ``elif`` branch here, one new entry in
-    :data:`_SPLIT_STRATEGY_TYPES`, and one new module in egm-data.
-    """
-    if cfg.type == "any_positive":
-        return AnyPositiveStrategy()
-    if cfg.type == "binned_density":
-        return BinnedDensityStrategy(n_bins=cfg.n_bins)
-    raise ConfigError(f"Unknown split_strategy.type {cfg.type!r}; this is a bug.")
-
-
 def _build_train_block(block: dict[str, Any]) -> TrainCLIConfig:
     _reject_unknown_keys(block, _TRAIN_KEYS, label="train")
     raw_clip = block.get("grad_clip_norm", DEFAULT_GRAD_CLIP_NORM)
@@ -471,6 +445,44 @@ def _build_output_block(block: dict[str, Any], config_dir: Path) -> OutputCLICon
         checkpoint_dir=checkpoint_dir,
         description=str(block.get("description", "")),
     )
+
+
+def _build_split_strategy_block(block: dict[str, Any]) -> SplitStrategyConfig:
+    """Translate a ``data.split_strategy:`` YAML block into the typed config.
+
+    The discriminator key is ``type``; the strategy-specific parameter
+    set lives flat under the block (currently just ``n_bins`` for
+    ``binned_density``). Validates the type against the known set and
+    rejects unknown keys so config typos fail loudly rather than
+    silently using the default.
+    """
+    _reject_unknown_keys(block, _SPLIT_STRATEGY_KEYS, label="data.split_strategy")
+    strategy_type = str(block.get("type", DEFAULT_SPLIT_STRATEGY_TYPE))
+    if strategy_type not in _SPLIT_STRATEGY_TYPES:
+        raise ConfigError(
+            f"data.split_strategy.type must be one of "
+            f"{sorted(_SPLIT_STRATEGY_TYPES)}; got {strategy_type!r}."
+        )
+    n_bins = int(block.get("n_bins", DEFAULT_BINNED_DENSITY_N_BINS))
+    if strategy_type == "binned_density" and n_bins < 2:
+        raise ConfigError(
+            f"data.split_strategy.n_bins must be >= 2 for binned_density; got {n_bins}."
+        )
+    return SplitStrategyConfig(type=strategy_type, n_bins=n_bins)
+
+
+def to_strategy(cfg: SplitStrategyConfig) -> PatientStratificationStrategy:
+    """Instantiate the egm-data strategy class from the YAML config.
+
+    Single registry point for type -> class dispatch: adding a new
+    strategy means one new ``elif`` branch here, one new entry in
+    :data:`_SPLIT_STRATEGY_TYPES`, and one new module in egm-data.
+    """
+    if cfg.type == "any_positive":
+        return AnyPositiveStrategy()
+    if cfg.type == "binned_density":
+        return BinnedDensityStrategy(n_bins=cfg.n_bins)
+    raise ConfigError(f"Unknown split_strategy.type {cfg.type!r}; this is a bug.")
 
 
 # ---------------------------------------------------------------------------
@@ -524,56 +536,8 @@ def apply_train_overrides(
 
 
 # ---------------------------------------------------------------------------
-# Builders that turn typed config into runtime objects
+# Runtime translators: config -> downstream API kwargs
 # ---------------------------------------------------------------------------
-
-
-def build_model_from_config(model_cfg: ModelCLIConfig) -> MobileViT1D:
-    """Construct the model described by a :class:`ModelCLIConfig`."""
-    if model_cfg.blocks is not None:
-        blocks = list(model_cfg.blocks)
-    else:
-        blocks = default_v1_blocks(
-            num_outputs=model_cfg.num_classes,
-            head_expansion_channels=model_cfg.head_expansion_channels,
-            head_dropout=model_cfg.head_dropout,
-        )
-    return MobileViT1D(
-        blocks=blocks,
-        width_multiplier=model_cfg.width_multiplier,
-        in_channels=model_cfg.in_channels,
-        stochastic_depth=model_cfg.stochastic_depth,
-    )
-
-
-def model_meta_from_config(model_cfg: ModelCLIConfig) -> dict[str, Any]:
-    """Architecture args to embed in a checkpoint for rebuild on eval/export."""
-    return {
-        "width_multiplier": model_cfg.width_multiplier,
-        "num_classes": model_cfg.num_classes,
-        "in_channels": model_cfg.in_channels,
-        "input_length": model_cfg.input_length,
-        "stochastic_depth": model_cfg.stochastic_depth,
-        "head_expansion_channels": model_cfg.head_expansion_channels,
-        "head_dropout": model_cfg.head_dropout,
-        "arch": model_cfg.arch,
-    }
-
-
-def model_config_from_meta(meta: dict[str, Any]) -> ModelCLIConfig:
-    """Inverse of :func:`model_meta_from_config` — rebuild a ModelCLIConfig from a checkpoint."""
-    return ModelCLIConfig(
-        width_multiplier=float(meta.get("width_multiplier", DEFAULT_WIDTH_MULTIPLIER)),
-        num_classes=int(meta.get("num_classes", DEFAULT_NUM_CLASSES)),
-        in_channels=int(meta.get("in_channels", DEFAULT_INPUT_CHANNELS)),
-        input_length=int(meta.get("input_length", DEFAULT_INPUT_LENGTH)),
-        stochastic_depth=float(meta.get("stochastic_depth", DEFAULT_STOCHASTIC_DEPTH)),
-        head_expansion_channels=int(
-            meta.get("head_expansion_channels", DEFAULT_HEAD_EXPANSION_CHANNELS)
-        ),
-        head_dropout=float(meta.get("head_dropout", DEFAULT_HEAD_DROPOUT)),
-        arch=str(meta.get("arch", "mobilevit_1d_v1")),
-    )
 
 
 def to_train_runtime_config(cfg: TrainExperimentConfig, pos_weight: float | None) -> TrainConfig:

@@ -2,10 +2,18 @@
 
 The single public function is :func:`binary_metrics` — it accepts raw
 single-logit model outputs and ground-truth labels (numpy arrays from
-:func:`collect_logits`) and returns a dict of scalar metrics + the
-reliability bins for the calibration diagram. The shape of that dict
-is the cross-package contract that the trainer's per-epoch state and
-the reporting layer's :class:`EpochRecord` are built around.
+:func:`myocard_egm_classifier.inference_helpers.collect_logits`) and returns
+a dict of scalar metrics + the reliability bins for the calibration
+diagram. The shape of that dict is the cross-package contract that
+the trainer's per-epoch state and the reporting layer's
+:class:`EpochRecord` are built around, and the same shape the eval
+CLI prints to stdout.
+
+Lives at the package top level (not under ``training/``) because both
+the training loop and the eval CLI compute the same metric bundle.
+Putting it under ``training/`` would imply training-only ownership,
+which isn't true; the metrics are evaluation primitives that
+training uses per-epoch.
 
 We use ``torchmetrics`` primitives rather than hand-rolling sigmoid +
 rank-based AUROC + ECE: the implementations are well-tested,
@@ -14,10 +22,10 @@ The trade-off is one additional runtime dep, which we already would
 have pulled in transitively the moment we wanted GPU-batched
 evaluation anyway.
 
-All metrics are computed CPU-side after the trainer pulls logits via
-:func:`collect_logits` (which does its own ``.cpu().numpy()``).
-:func:`binary_metrics` then converts back to torch tensors at the
-boundary so it can hand them to torchmetrics.
+All metrics are computed CPU-side after the caller pulls logits via
+:func:`~myocard_egm_classifier.inference_helpers.collect_logits` (which does
+its own ``.cpu().numpy()``). :func:`binary_metrics` then converts back
+to torch tensors at the boundary so it can hand them to torchmetrics.
 
 Reliability bins are emitted as instances of the contracts'
 :class:`myocard_egm_data.records.ReliabilityBin` Pydantic model
@@ -63,6 +71,8 @@ def binary_metrics(
     count. The trainer's reporting path projects the scalars into the
     Pydantic ``EpochRecord.val_metrics`` field; the reliability list
     fills ``EpochRecord.val_reliability`` after a per-bin conversion.
+    The eval CLI passes the same dict through :func:`_format_metrics`
+    for the stdout summary.
 
     Parameters
     ----------
