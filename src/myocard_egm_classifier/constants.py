@@ -101,9 +101,45 @@ DEFAULT_SPLIT_SEED = 0
 # ONNX export (design doc Section 14)
 # ---------------------------------------------------------------------------
 
-DEFAULT_ONNX_OPSET = 17
-"""Covers Conv1d, BatchNorm1d, LayerNorm, SiLU, GELU, MultiheadAttention.
+DEFAULT_ONNX_OPSET = 18
+"""ONNX operator-set version pinned at export time.
+
+Covers Conv1d, BatchNorm1d, LayerNorm, SiLU, GELU, MultiheadAttention
+plus everything the dynamo exporter touches under modern PyTorch.
+
+PyTorch 2.5+ requires opset >= 18 in its dynamo exporter — asking for
+opset 17 triggers an auto-downconvert pass that currently fails on
+``Squeeze`` / ``Unsqueeze`` axes-attribute conversions and leaves the
+file at opset 18 anyway. Setting 18 directly skips the broken
+downconvert. Supported by current ONNX Runtime + TensorRT 8.6+/10
+releases.
+
 Fixed input shape (B, 1, T); only the batch axis is dynamic."""
+
+DEFAULT_NORMALIZATION_SCHEME = "zscore"
+"""Per-trace normalization recorded in the exported model_metadata
+sidecar and applied by the export-time calibration loader. ``zscore``
+matches the v1 training default (:data:`DEFAULT_ZNORM = True`).
+``zero2one`` is supported for export-side experimentation; training +
+eval support for it is tracked separately."""
+
+DEFAULT_DECISION_THRESHOLD = 0.5
+"""Decision threshold baked into the exported metadata's
+``decision.threshold`` field. Matches the eval CLI default; at 0.5,
+label_pred is invariant under any positive temperature scaling of the
+logits, so deferring calibration to export time doesn't shift the
+runtime's classification behavior."""
+
+DEFAULT_CLASS_LABELS = ("healthy", "fibrotic")
+"""Human-readable class names for the v1 binary head. Position
+matches the integer code (index 0 = healthy, index 1 = fibrotic;
+matches :data:`HEALTHY_LABEL` and :data:`FIBROTIC_LABEL`)."""
+
+DEFAULT_EXPORT_NAME = "best"
+"""Base filename for the exported artifact pair: produces
+``<name>.onnx`` + ``<name>.model_metadata.json`` under the configured
+output directory. Matches the convention in the
+``egm_class_model_metadata`` schema docs."""
 
 # ---------------------------------------------------------------------------
 # Data loader / per-trace augmentation (design doc Section 11 + 12)

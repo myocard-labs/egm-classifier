@@ -72,6 +72,7 @@ coverage.xml
 data/
 banks/
 checkpoints/
+exports/
 runs/
 logs/
 mlruns/
