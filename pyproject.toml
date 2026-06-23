@@ -58,8 +58,8 @@ classifiers = [
 # myocard-egm-data; the legacy data/ subpackage is gone. h5py is NOT
 # a direct dep — egm-data carries it.
 dependencies = [
-  "myocard-egm-contracts @ git+https://github.com/myocard-labs/egm-contracts.git@v0.3.0",
-  "myocard-egm-data[torch] @ git+https://github.com/myocard-labs/egm-data.git@v0.3.2",
+  "myocard-egm-contracts @ git+https://github.com/myocard-labs/egm-contracts.git@v0.4.0",
+  "myocard-egm-data[torch] @ git+https://github.com/myocard-labs/egm-data.git@v0.3.3",
   "torch>=2.1",
   # Metrics primitives (BinaryAUROC, BinaryAccuracy, BinaryStatScores,
   # BinaryCalibrationError, ...). We deliberately use torchmetrics' batch-
