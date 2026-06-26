@@ -51,11 +51,15 @@ the user at the extra.
 
 ## v0.2.0+ — concrete next steps
 
-These are sized for "could land in one focused PR each." Order is
-suggestive; pick by what unblocks the next training campaign or
-deployment milestone.
+These are sized for "could land in one focused PR each." Items
+that landed cross-cutting Phase work in the meta repo's
+`project_plan.md` carry a `→ tracked at intracardiac-platform Phase X`
+annotation so it's clear which items are scheduled vs which are
+component-internal tech debt.
 
-### `zero2one` normalization in train + eval
+### `zero2one` normalization in train + eval — Phase 1.5
+
+> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5 (increase synthetic-data complexity + realism).
 
 The export CLI already supports `zscore` and `zero2one` (the latter
 applied directly inside the calibration loop). Train + eval are
@@ -76,7 +80,9 @@ job:
 The deferred work was deliberately moved out of v0.1.0 scope so the
 training side didn't have to grow a new code path mid-port.
 
-### `run.json` as the export-config source (downsample policy)
+### `run.json` as the export-config source (downsample policy) — component-internal cleanup
+
+> → Component-internal cleanup; tracked as task #286. Do anytime; doesn't need a project-phase home. Pairs naturally with the `filters.decimation` work scheduled in egm-signal under Phase 1.5.
 
 The export YAML currently duplicates `fs_hz` and `bandpass_hz` from
 the training pipeline — typo-prone, no enforcement that the values
@@ -96,7 +102,9 @@ match what the model was trained against. To fix:
 Deferred until the full polyrepo refactor is settled so the
 training-side change can land cleanly.
 
-### Cross-project code placement audit
+### Cross-project code placement audit — Refactor Step 8 (cleanup)
+
+> → Tracked at `intracardiac-platform/project/refactor_checklist.md` Phase 8 (cleanup + verification). The audit is the comprehensive end-of-refactor sweep — by Phase 8 all repos exist and have settled, so it can resolve every misplaced piece of code at once rather than piecemeal during each scaffolding pass. TraceTransform is one known candidate; others will surface as the per-repo roadmap reviews proceed. Also tracked as task #287.
 
 Some library code currently lives in the wrong package. Known
 candidate:
@@ -113,7 +121,9 @@ Deliverable: a brief audit doc with each questionable item, its
 current home, its consumers, a recommendation (move / keep /
 split), then a follow-up commit per move.
 
-### Migrate `torch.onnx.export` to the dynamo path
+### Migrate `torch.onnx.export` to the dynamo path — component-internal
+
+> → Component-internal. Tracked as task #288. Do when convenient; no cross-cutting dependencies.
 
 The export currently passes `dynamo=False` to use the legacy
 TorchScript-based exporter. The legacy path handles our 1D Conv
@@ -128,7 +138,9 @@ shape, but PyTorch is moving toward the dynamo exporter (default in
   (not just an untrained model) to confirm tolerance numbers hold.
 - Bump opset default if dynamo emits anything newer.
 
-### Move `MobileViTBlock` divisibility check from `forward` to `__init__`
+### Move `MobileViTBlock` divisibility check from `forward` to `__init__` — component-internal
+
+> → Component-internal. Tracked as task #289.
 
 `mobilevit_block.py:135` does `if T % p != 0: raise ValueError(...)`
 inside `forward()`, which produces one `TracerWarning` per block
@@ -144,7 +156,9 @@ per forward call. Fix:
    remove the `warnings.filterwarnings(..., TracerWarning)`
    suppression in `export/onnx_export.py`.
 
-### Investigation: does activation-peak anchoring help?
+### Investigation: does activation-peak anchoring help? — Phase 1.5
+
+> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5. Cross-repo work: opt-in flag in synthetic-egm-pipeline + A/B comparison here. Also tracked as task #293.
 
 The v1 synthetic producer always crops each trace to a fixed
 window centered on the single simulated activation peak — what
@@ -172,7 +186,9 @@ moot anyway (you want long traces spanning many activations, not
 a single-peak crop), so the v0.2.0–Phase-2 window is the right
 time to settle this.
 
-### Investigation: training-time additive noise augmentation
+### Investigation: training-time additive noise augmentation — Phase 1.5
+
+> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5. Also tracked as task #294.
 
 v1 ships with no training-time additive-noise augmentation —
 realistic recording noise is injected at *producer* time by the
@@ -192,7 +208,9 @@ producer already adds noise. Two-step follow-up:
 2. If the survey is encouraging, add a `TraceTransform`
    augmentation and A/B test in the v1 classifier.
 
-### Theory-docs convention (with egm-viewer)
+### Theory-docs convention (with egm-viewer / egm-studio) — Refactor Step 6
+
+> → Tracked at `intracardiac-platform/project/refactor_checklist.md` Phase 6 (egm-studio). The egm-studio scaffolding pass needs to know about this convention so `docs/usage.md` includes the visual-interpretation half + cross-link back here for the math.
 
 `docs/theory.md` in this repo is the source of truth for the
 **math + operational meaning** of every metric, knob, and

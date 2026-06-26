@@ -806,7 +806,7 @@ models.
 
 ---
 
-## 13. Validation strategy and "sim-to-real" evaluation
+## 13. Validation strategy and the IAFDB diagnostic
 
 **v1 choice:** Patient-aware split where `patient_id` on each trace is
 the split key. For synthetic data the producer stamps `patient_id =
@@ -814,7 +814,7 @@ simulation_id` (every trace from the same Finitewave run shares a
 substrate realization); for IAFDB the producer stamps `patient_id` from
 the source record. 80/10/10 train/val/test by `patient_id`.
 
-**Second-stage evaluation against IAFDB is predictions-only.** Per the
+**The second-stage IAFDB pass is a label-free diagnostic, not a scored evaluation.** Per the
 [IAFDB epistemic catch-22 memo](https://github.com/myocard-labs/intracardiac-platform/tree/main/project),
 IAFDB has no trustworthy fibrosis labels — the high-voltage healthy
 extraction in `iafdb-pipeline` produces a *labeling assumption*, not
@@ -826,8 +826,10 @@ without it. The v0.2.0 eval CLI therefore:
 - emits classification metrics (accuracy, AUROC, ECE, per-class
   precision/recall/F1) **only when the input bank carries
   trustworthy labels** (the synthetic banks, clean or noise-mixed);
-- for IAFDB-only inputs, emits predictions plus a confidence-calibration
-  plot and explicitly *does not* report accuracy.
+- for IAFDB inputs, emits predictions for a label-free look at the
+  model's P(fibrotic) distribution (the saturation diagnostic) and
+  explicitly *does not* report accuracy or a calibration curve — both
+  need labels IAFDB lacks.
 
 The legacy `eval_sim2real_cmd` is dropped. Real-world evaluation that
 breaks the catch-22 — joint MRI + EGM measurement, or another modality
@@ -877,7 +879,8 @@ predictions-only diagnostic, not a metrics-bearing eval.
 
 - Guo et al. (2017). *On Calibration of Modern Neural Networks.* ICML.
   Reliability diagrams and ECE; the calibration toolkit for the
-  IAFDB-side diagnostic.
+  **synthetic-side** evaluation. Both need labels, so they don't apply
+  to the label-free IAFDB diagnostic.
 - Project memory: `project_iafdb_eval_catch22` — the full catch-22
   argument.
 - Project memory: `project_icd_cnn_fibrosis` — patient-aware splitting
