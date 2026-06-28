@@ -20,7 +20,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "myocard-egm-classifier"
-version = "0.3.0"
+version = "0.4.0"
 description = "1D MobileViT classifier for bipolar intracardiac EGM traces. Consumes ClassifierBank-format input from myocard-egm-data; trains a binary fibrotic-vs-healthy head."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -58,12 +58,16 @@ classifiers = [
 # myocard-egm-data; the legacy data/ subpackage is gone. h5py is NOT
 # a direct dep — egm-data carries it.
 dependencies = [
-  "myocard-egm-contracts @ git+https://github.com/myocard-labs/egm-contracts.git@v0.4.0",
-  "myocard-egm-data[torch] @ git+https://github.com/myocard-labs/egm-data.git@v0.3.3",
+  "myocard-egm-contracts @ git+https://github.com/myocard-labs/egm-contracts.git@v0.5.1",
+  "myocard-egm-data[torch] @ git+https://github.com/myocard-labs/egm-data.git@v0.4.0",
   # myocard-egm-signal ships the temperature-scaling primitive that
   # the export CLI's calibration step calls into. v0.2.0 added the
   # model/temperature_scaling module.
   "myocard-egm-signal @ git+https://github.com/myocard-labs/egm-signal.git@v0.2.0",
+  # pydantic is used directly to validate stable ids (ids.py); it also
+  # arrives transitively via egm-contracts, but we import it by name so
+  # we declare it.
+  "pydantic>=2",
   "torch>=2.1",
   # Metrics primitives (BinaryAUROC, BinaryAccuracy, BinaryStatScores,
   # BinaryCalibrationError, ...). We deliberately use torchmetrics' batch-
