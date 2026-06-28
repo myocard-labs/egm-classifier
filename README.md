@@ -37,7 +37,7 @@ pip install -e ".[dev,onnx]"
 pre-commit install
 ```
 
-The runtime deps (`myocard-egm-contracts`, `myocard-egm-data[torch]`, `myocard-egm-signal`, `torch`, `torchmetrics`, `numpy`, `tqdm`, `pyyaml`) come in transitively. The three myocard siblings are pinned to git tags during pre-1.0; drop the direct references once they publish to PyPI.
+The runtime deps (`myocard-egm-contracts`, `myocard-egm-data[torch]`, `myocard-egm-signal`, `pydantic`, `torch`, `torchmetrics`, `numpy`, `tqdm`, `pyyaml`) come in transitively. The three myocard siblings are pinned to git tags during pre-1.0; drop the direct references once they publish to PyPI.
 
 The `[onnx]` extra is kept optional so training-only images (Docker, K8s) don't pull ~200 MB of deployment toolchain. The `egm-class-export` script is installed regardless; if you invoke it without the extra, it'll catch the import failure at runtime and point you at the right `pip install` line.
 
@@ -58,10 +58,12 @@ Three console scripts are installed:
 | Command | Purpose |
 |---|---|
 | `egm-class-train` | Train a 1D MobileViT against a labeled `ClassifierBank` with patient-aware splits and AUROC-selected best-checkpoint saving. |
-| `egm-class-eval` | Run sequential inference over a labeled bank, write a sibling `<stem>_pred.cbank.h5` with per-trace logits + probabilities + predictions, print the scalar metric bundle to stdout. |
+| `egm-class-eval` | Run sequential inference over a labeled or unlabeled bank, write a sibling `<stem>_pred.cbank.h5` (a stable `lpred_`/`upred_` id) with per-trace logits + probabilities + predictions; print the scalar metric bundle to stdout for labeled input. |
 | `egm-class-export` | Fit a temperature scalar against a labeled calibration bank (optional), export the calibrated model to ONNX, write the typed metadata sidecar the C++ runtime consumes. |
 
 All three are YAML-config-driven; argparse flags act as per-invocation overrides on top of the YAML. Full CLI reference and end-to-end walkthroughs in [`docs/usage.md`](docs/usage.md). Three pre-written example configs covering the v1 baseline pipeline live under [`examples/`](examples/).
+
+Every tracked artifact carries a stable cross-artifact id — the training run (`run_id`), the exported model (`model_id`), and the eval predictions bank (`lpred_`/`upred_`) — all derived from a single `output.run_name` descriptor, so a downstream provenance index can trace what produced what. See [`docs/usage.md`](docs/usage.md) §"Stable artifact IDs".
 
 ---
 
@@ -105,7 +107,7 @@ CI runs the same checks on Python 3.10, 3.11, and 3.12 — see `.github/workflow
 
 ## Project status
 
-This package is part of the in-progress [myocard-labs](https://github.com/myocard-labs) refactor. Pre-1.0 — expect breaking changes across minor versions until the schemas + CLI configs stabilise. The current release is `v0.1.0` and pins `myocard-egm-contracts v0.4.0`, `myocard-egm-data[torch] v0.3.3`, and `myocard-egm-signal v0.2.0`. See [`project/roadmap.md`](project/roadmap.md) for what's planned (zero2one normalization in train/eval, `run.json` as the export-config source, the activation-peak-anchoring investigation, dynamo ONNX exporter migration) and [`project/architecture.md`](project/architecture.md) for the design rationale.
+This package is part of the in-progress [myocard-labs](https://github.com/myocard-labs) refactor. Pre-1.0 — expect breaking changes across minor versions until the schemas + CLI configs stabilise. The current release is `v0.4.0` (stable cross-artifact ids on every output, consuming the egm-contracts v0.5.x linkage schemas) and pins `myocard-egm-contracts v0.5.1`, `myocard-egm-data[torch] v0.4.0`, and `myocard-egm-signal v0.2.0`. See [`project/roadmap.md`](project/roadmap.md) for what's planned (zero2one normalization in train/eval, `run.json` as the export-config source, the activation-peak-anchoring investigation, dynamo ONNX exporter migration) and [`project/architecture.md`](project/architecture.md) for the design rationale.
 
 ---
 

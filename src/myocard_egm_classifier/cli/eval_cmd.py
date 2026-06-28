@@ -17,20 +17,25 @@ Flow:
 2. Load the input ClassifierBank.
 3. Run inference sequentially over every trace (no patient-aware
    split, no augmentation). Logits are collected in bank order.
-4. Populate ``ClassifierPrediction`` on every trace and write a
-   sibling ``<stem>_pred.cbank.h5`` next to the input (configurable
-   via ``output.predictions_bank``).
-5. Compute the standard binary-metric bundle from the inference
-   logits + bank labels, and print it to stdout. **No metrics file
-   is written** — the raw logits and labels live on the predictions
-   bank, so any downstream analysis can re-derive these (or any
-   other metric) from there.
+4. Populate ``ClassifierPrediction`` on every trace, stamp the
+   producing model's id + the predictions bank's own stable
+   cross-artifact id (``lpred_`` labeled / ``upred_`` unlabeled), and
+   write a sibling ``<stem>_pred.cbank.h5`` next to the input
+   (configurable via ``output.predictions_bank``).
+5. For a labeled bank, compute the standard binary-metric bundle from
+   the inference logits + bank labels and print it to stdout. For an
+   unlabeled bank, skip metrics. **No metrics file is written** — the
+   raw logits and labels live on the predictions bank, so any
+   downstream analysis can re-derive these (or any other metric) from
+   there.
 
-The CLI assumes the input bank carries trustworthy ``label_truth``
-on every trace (e.g. a synthetic test bank). Running against an
-unlabeled / single-class bank produces a single-class warning from
-egm-data's loaders and degenerate AUROC; that path is intentionally
-not supported here — see ``project_iafdb_eval_catch22`` for context.
+The CLI supports both labeled and unlabeled input banks. A fully-
+labeled bank (e.g. a synthetic test bank) yields a scored eval — an
+``lpred_`` predictions bank plus the scalar metric bundle on stdout.
+An unlabeled bank (the IAFDB shape) yields a ``upred_`` predictions
+bank with metrics skipped: predictions are still useful for
+qualitative inspection, but substrate-truth metrics can't be computed
+and aren't faked — see ``project_iafdb_eval_catch22`` for context.
 
 Calibration is **not** applied in eval. The predicted probabilities
 are the raw ``sigmoid(logit)``. Calibration (temperature scaling)
@@ -79,7 +84,9 @@ from myocard_egm_classifier.eval import (
     build_eval_dataset,
     default_predictions_bank_path,
     populate_predictions,
+    stamp_predictions_model_id,
 )
+from myocard_egm_classifier.ids import derive_predictions_bank_id, validate_artifact_id
 from myocard_egm_classifier.inference_helpers import collect_logits
 from myocard_egm_classifier.metrics import binary_metrics
 
@@ -220,16 +227,48 @@ def main(argv: list[str] | None = None) -> int:
 
     populate_predictions(bank, logits, threshold=cfg.threshold)
 
-    try:
-        labels = bank.label_truth_array()
-    except ValueError as exc:
-        print(f"ERROR: bank has unlabeled traces; cannot compute metrics: {exc}", file=sys.stderr)
-        return 1
+    # Determine labeled-ness without raising (label_truth_array() raises on
+    # any unlabeled trace). A fully-labeled bank yields a scored eval
+    # (lpred_, full metric suite); an unlabeled / partially-labeled bank is
+    # a label-free diagnostic (upred_, predictions only) — the IAFDB shape,
+    # per project_iafdb_eval_catch22 + feedback_iafdb_unlabeled_no_ml_validation.
+    labeled = bool(bank.traces) and all(t.label_truth is not None for t in bank.traces)
 
-    metrics = binary_metrics(logits, labels, threshold=cfg.threshold)
-    print()
-    print(_format_metrics(metrics, threshold=cfg.threshold))
-    print()
+    if labeled:
+        labels = bank.label_truth_array()
+        metrics = binary_metrics(logits, labels, threshold=cfg.threshold)
+        print()
+        print(_format_metrics(metrics, threshold=cfg.threshold))
+        print()
+    else:
+        print()
+        print(
+            "Bank has unlabeled traces — writing a label-free predictions "
+            "bank (upred_); metrics skipped (no truth labels)."
+        )
+        print()
+
+    # Cross-artifact provenance. The producing model's id is stamped onto
+    # each trace's trace_metadata (short-term home for the model->prediction
+    # link; the predictions bank has no dedicated model_id field yet). The
+    # predictions bank's own stable id is an explicit config override, else
+    # a derived lpred_/upred_ from the labeled-ness + the producing run's
+    # name (both read from the checkpoint's training_provenance).
+    prov = ckpt.get("training_provenance", {})
+    model_id = prov.get("produced_model_id") if isinstance(prov, dict) else None
+    run_name = prov.get("run_name") if isinstance(prov, dict) else None
+    if model_id:
+        stamp_predictions_model_id(bank, model_id)
+
+    if cfg.output.bank_id is not None:
+        try:
+            bank.id = validate_artifact_id(cfg.output.bank_id)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+    else:
+        bank.id = derive_predictions_bank_id(labeled=labeled, run_name=run_name)
+    print(f"Predictions bank id: {bank.id}")
 
     try:
         out_path = write_classifier_bank(bank, predictions_bank_path)

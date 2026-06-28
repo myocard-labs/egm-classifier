@@ -248,6 +248,51 @@ def test_training_provenance_passes_through_well_known_keys(tmp_path: Path) -> N
     assert out_prov["git_sha"] == "deadbeef"
 
 
+def _idstr(value: Any) -> Any:
+    """Normalize a contracts id field (RootModel or str) to a plain string."""
+    return value.root if hasattr(value, "root") else value
+
+
+def test_produced_model_id_becomes_top_level_model_id(tmp_path: Path) -> None:
+    """The checkpoint's ``training_provenance.produced_model_id`` surfaces as
+    the metadata sidecar's top-level ``model_id`` (the model's own stable id).
+    The other ids ride through as training-provenance breadcrumbs."""
+    prov = {
+        "run_id": "run_eval_export_2026-06-27",
+        "produced_model_id": "model_eval_export_2026-06-27",
+        "trained_on_bank_id": "tbank_eval_export_2026-06-27",
+        "run_name": "eval_export",
+        "git_sha": "cafef00d",
+    }
+    ckpt_path = _make_checkpoint(tmp_path, training_provenance=prov)
+    out_dir = tmp_path / "exports"
+    cfg_path = _write_yaml(tmp_path, _minimal_yaml(ckpt=ckpt_path, out_dir=out_dir, bank=None))
+
+    rc = export_main([str(cfg_path), "--device", "cpu"])
+    assert rc == 0
+    meta = load_egm_class_model_metadata(out_dir / "best.model_metadata.json")
+    assert _idstr(meta.model_id) == "model_eval_export_2026-06-27"
+    # Inputs/context thread through as provenance breadcrumbs; the model's
+    # own id is NOT duplicated into the block.
+    out_prov = meta.training_provenance or {}
+    assert out_prov["trained_on_bank_id"] == "tbank_eval_export_2026-06-27"
+    assert out_prov["run_name"] == "eval_export"
+    assert "produced_model_id" not in out_prov
+
+
+def test_no_provenance_leaves_model_id_unset(tmp_path: Path) -> None:
+    """A legacy checkpoint without training_provenance exports a sidecar whose
+    optional ``model_id`` is ``None`` (schema permits it)."""
+    ckpt_path = _make_checkpoint(tmp_path)
+    out_dir = tmp_path / "exports"
+    cfg_path = _write_yaml(tmp_path, _minimal_yaml(ckpt=ckpt_path, out_dir=out_dir, bank=None))
+
+    rc = export_main([str(cfg_path), "--device", "cpu"])
+    assert rc == 0
+    meta = load_egm_class_model_metadata(out_dir / "best.model_metadata.json")
+    assert meta.model_id is None
+
+
 def test_pytorch_onnx_parity(tmp_path: Path) -> None:
     """The exported ONNX must produce logits matching the PyTorch wrapped model.
 

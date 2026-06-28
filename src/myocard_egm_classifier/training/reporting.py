@@ -55,6 +55,9 @@ def write_run(
     select_metric: str,
     test_loss: float | None = None,
     test_metrics: Mapping[str, Any] | None = None,
+    run_id: str | None = None,
+    trained_on_bank_id: str | None = None,
+    produced_model_id: str | None = None,
 ) -> tuple[Path, Path]:
     """Write both ``metrics.csv`` and ``run.json`` into ``out_dir``.
 
@@ -84,6 +87,9 @@ def write_run(
         select_metric=select_metric,
         test_loss=test_loss,
         test_metrics=test_metrics,
+        run_id=run_id,
+        trained_on_bank_id=trained_on_bank_id,
+        produced_model_id=produced_model_id,
     )
     csv_path = write_training_metrics(out_dir / "metrics.csv", epoch_records)
     json_path = write_training_run_record(out_dir / "run.json", record)

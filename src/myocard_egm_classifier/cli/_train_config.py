@@ -270,6 +270,10 @@ class OutputCLIConfig:
 
     checkpoint_dir: Path = Path("checkpoints")
     description: str = ""
+    # Descriptor segment for the stable cross-artifact ids (run_/model_/
+    # lpred_/upred_). Sanitized to ``[a-z0-9_]`` by ids.py; empty falls
+    # back to the ``egm_classifier`` default. Does not affect file paths.
+    run_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -323,7 +327,7 @@ _TRAIN_KEYS = {
     "seed",
     "select_metric",
 }
-_OUTPUT_KEYS = {"checkpoint_dir", "description"}
+_OUTPUT_KEYS = {"checkpoint_dir", "description", "run_name"}
 _TOP_KEYS = {"model", "data", "train", "output"}
 _SPLIT_STRATEGY_TYPES = {"any_positive", "binned_density"}
 _SPLIT_STRATEGY_KEYS = {"type", "n_bins"}
@@ -444,6 +448,7 @@ def _build_output_block(block: dict[str, Any], config_dir: Path) -> OutputCLICon
     return OutputCLIConfig(
         checkpoint_dir=checkpoint_dir,
         description=str(block.get("description", "")),
+        run_name=str(block.get("run_name", "")),
     )
 
 
@@ -655,4 +660,8 @@ def _train_to_dict(t: TrainCLIConfig) -> dict[str, Any]:
 
 
 def _output_to_dict(o: OutputCLIConfig) -> dict[str, Any]:
-    return {"checkpoint_dir": str(o.checkpoint_dir), "description": o.description}
+    return {
+        "checkpoint_dir": str(o.checkpoint_dir),
+        "description": o.description,
+        "run_name": o.run_name,
+    }

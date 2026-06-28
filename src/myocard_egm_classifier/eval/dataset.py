@@ -45,7 +45,15 @@ def build_eval_dataset(
     disabled and there's no RNG-sensitive behavior left to control.
     """
     signal = bank.signal_array()
-    labels = bank.label_truth_array()
+    # EGMTraceDataset needs a labels array, but the eval CLI discards the
+    # labels collect_logits returns — predictions are stamped from logits
+    # alone. A fully-labeled bank uses its real labels; an unlabeled bank
+    # (the IAFDB shape, where label_truth_array() would raise) gets a zero
+    # placeholder that never reaches any output.
+    if all(t.label_truth is not None for t in bank.traces):
+        labels = bank.label_truth_array()
+    else:
+        labels = np.zeros(bank.n_traces, dtype=np.int64)
     transform = TraceTransform(
         input_length=input_length,
         znorm=znorm,

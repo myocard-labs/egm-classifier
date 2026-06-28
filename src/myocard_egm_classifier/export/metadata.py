@@ -77,16 +77,21 @@ def _training_provenance(
         "calibration_temperature": float(temperature),
         "calibration_bank_path": str(calibration_bank) if calibration_bank else None,
     }
-    # Pull well-known keys out of the checkpoint if the trainer stamped
-    # them. The schema describes 'run_id', 'run_json_path',
-    # 'training_bank_path', 'training_bank_schema_version', 'git_sha' as
-    # well-known producer keys. Today's training checkpoints don't carry
-    # these, but as task #286 wires run.json into export, this loop will
-    # start finding them and threading them through.
+    # Pull well-known keys out of the checkpoint's training_provenance if
+    # the trainer stamped them. As of v0.4.0 the trainer stamps the
+    # cross-artifact ids (run_id, trained_on_bank_id, run_name) plus
+    # git_sha into the checkpoint, so these now thread straight through to
+    # the metadata sidecar (closing task #286). 'run_json_path',
+    # 'training_bank_path', and 'training_bank_schema_version' stay
+    # schema-well-known but unstamped; the guarded copy keeps them
+    # forward-compatible. produced_model_id is surfaced as the top-level
+    # model_id (see build_metadata), not duplicated into this block.
     src_meta = checkpoint_dict.get("training_provenance", {})
     if isinstance(src_meta, dict):
         for key in (
             "run_id",
+            "trained_on_bank_id",
+            "run_name",
             "run_json_path",
             "training_bank_path",
             "training_bank_schema_version",
@@ -108,6 +113,11 @@ def build_metadata(
     temperature: float,
 ) -> EgmClassModelMetadata:
     """Assemble the Pydantic :class:`EgmClassModelMetadata` for the export.
+
+    The metadata's top-level ``model_id`` is sourced from the checkpoint's
+    ``training_provenance.produced_model_id`` (the stable id the trainer
+    minted for this model); it's ``None`` for legacy checkpoints, which the
+    schema permits.
 
     Parameters
     ----------
@@ -133,7 +143,14 @@ def build_metadata(
     onnx_sha = _sha256_of_file(onnx_path)
     onnx_size = onnx_path.stat().st_size
 
+    # The model's own stable id is the run's produced_model_id, stamped
+    # into the checkpoint by the trainer. None on legacy checkpoints — the
+    # schema field is optional, so older exports still validate.
+    src_prov = checkpoint_dict.get("training_provenance", {})
+    produced_model_id = src_prov.get("produced_model_id") if isinstance(src_prov, dict) else None
+
     return build_egm_class_model_metadata(
+        model_id=produced_model_id,
         model_artifact={
             "filename": onnx_path.name,
             "framework": "onnx",

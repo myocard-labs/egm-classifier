@@ -63,6 +63,32 @@ def populate_predictions(
         )
 
 
+PREDICTION_MODEL_ID_KEY = "produced_by_model_id"
+"""``trace_metadata`` key under which eval records the producing model's id.
+
+Short-term home for the model->predictions cross-artifact link: the
+predictions :class:`ClassifierBank` has no dedicated ``model_id`` field
+yet, and ``ClassifierBank.id`` is the bank's *own* id, so the producing
+model's id rides in each trace's generic ``trace_metadata`` dict. The
+long-term home is undecided — a ``ClassifierPrediction.model_id`` field
+or a bank-level metadata dict are both candidates. Kept as one named
+constant so the eventual migration is a single-point find."""
+
+
+def stamp_predictions_model_id(bank: ClassifierBank, model_id: str) -> None:
+    """Record the producing model's id on every trace of ``bank``.
+
+    Writes ``model_id`` into each trace's generic ``trace_metadata`` dict
+    under :data:`PREDICTION_MODEL_ID_KEY`. The same model produces every
+    prediction in one eval pass, so the value is identical across traces;
+    storing it per-trace is the cost of using the only generic provenance
+    slot the bank carries today. Idempotent (re-stamping overwrites the
+    key). Mutates ``bank`` in place.
+    """
+    for trace in bank.traces:
+        trace.trace_metadata[PREDICTION_MODEL_ID_KEY] = model_id
+
+
 def default_predictions_bank_path(input_bank: Path) -> Path:
     """Derive the sibling ``_pred.cbank.h5`` path from the input bank.
 

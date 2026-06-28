@@ -3,10 +3,11 @@
 PR B ships only the inference + prediction-stamping path. The CLI
 (``egm-class-eval`` in :mod:`myocard_egm_classifier.cli.eval_cmd`)
 loads a trained checkpoint, runs inference over every trace of a
-**labeled** ClassifierBank, writes a sibling ``<stem>_pred.cbank.h5``
-with :class:`ClassifierPrediction` populated on each trace, and
-prints scalar metrics to stdout. No calibration, no metrics file, no
-new schemas — see ``project/architecture.md`` for the design rationale.
+ClassifierBank, writes a sibling ``<stem>_pred.cbank.h5`` with
+:class:`ClassifierPrediction` populated on each trace, and (for a
+labeled bank) prints scalar metrics to stdout. No calibration, no
+metrics file, no new schemas — see ``project/architecture.md`` for the
+design rationale.
 
 Module layout
 -------------
@@ -25,12 +26,14 @@ The CLI module (``cli/eval_cmd.py``) is intentionally thin: argparse,
 config loading, and the top-level orchestration that wires these
 helpers together.
 
-Unlabeled-bank inference (e.g. IAFDB-only) is **not** supported. The
-patient-substrate ground truth required to interpret eval metrics
-doesn't exist for IAFDB data — see the
-``project_iafdb_eval_catch22`` memory for context. If a downstream
-tool needs predictions on unlabeled data, it can call the model from
-a notebook directly; the CLI is reserved for labeled-bank eval.
+Both labeled and unlabeled banks are supported. A fully-labeled bank
+yields a scored eval (an ``lpred_`` predictions bank + the full metric
+suite); an unlabeled bank yields a label-free diagnostic (a ``upred_``
+predictions bank, metrics skipped) — the IAFDB shape, useful for
+qualitative inspection in egm-viewer. Interpreting *metrics* on
+IAFDB-derived data is still off the table (no substrate ground truth),
+so the CLI skips metrics on unlabeled input rather than fabricating
+them — see the ``project_iafdb_eval_catch22`` memory for context.
 
 Future additions (calibration application at eval time, per-cohort
 slicing, multi-class heads) land here as new modules.
@@ -40,12 +43,16 @@ from __future__ import annotations
 
 from myocard_egm_classifier.eval.dataset import build_eval_dataset
 from myocard_egm_classifier.eval.predictions import (
+    PREDICTION_MODEL_ID_KEY,
     default_predictions_bank_path,
     populate_predictions,
+    stamp_predictions_model_id,
 )
 
 __all__ = [
+    "PREDICTION_MODEL_ID_KEY",
     "build_eval_dataset",
     "default_predictions_bank_path",
     "populate_predictions",
+    "stamp_predictions_model_id",
 ]

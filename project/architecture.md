@@ -222,29 +222,44 @@ and TraceTransform is wired into `EGMTraceDataset`'s `__getitem__`.
 
 ## The eval CLI
 
-`egm-class-eval` is intentionally thin and intentionally narrow:
+`egm-class-eval` is intentionally thin:
 
-- **Input:** one labeled `ClassifierBank` + one checkpoint.
+- **Input:** one `ClassifierBank` (labeled or unlabeled) + one
+  checkpoint.
 - **Output:** a sibling `<stem>_pred.cbank.h5` with
-  `ClassifierPrediction` stamped on every trace, and a metric
-  bundle printed to stdout. **No metrics file written.**
+  `ClassifierPrediction` stamped on every trace and its own stable
+  `lpred_`/`upred_` id, plus — for a labeled bank — a metric bundle
+  printed to stdout. **No metrics file written.**
 - **Path:** sequential iteration over the bank (no patient split, no
   augmentation), `collect_logits` over the loader,
   `populate_predictions` over the bank object, `write_classifier_bank`
   out.
 
-Two deliberate non-features:
+Labeled vs unlabeled is decided non-destructively (`all(t.label_truth
+is not None ...)`, which doesn't raise the way `label_truth_array()`
+does):
 
-1. **No unlabeled-bank inference.** Eval assumes every trace has
-   `label_truth`. Running against an unlabeled IAFDB-only bank
-   yields degenerate AUROC and single-class warnings from egm-data's
-   loaders. The IAFDB-as-eval-target path is logically circular and
-   tracked separately (`project_iafdb_eval_catch22` memory).
-2. **No metrics file.** The raw logits + labels live on the
-   predictions bank; any metric (or recomputation at a different
-   threshold) can be re-derived from there. Writing a separate
-   metrics file would duplicate the information and create two
-   sources of truth.
+- A **fully-labeled** bank is a scored eval — an `lpred_` predictions
+  bank plus the full metric suite on stdout.
+- An **unlabeled** bank (the IAFDB shape) is a label-free diagnostic —
+  a `upred_` predictions bank, metrics skipped.
+
+This is the one subtlety worth internalizing: *predicting* on an
+unlabeled bank is a legitimate, useful operation (it feeds the viewer's
+qualitative inspection of IAFDB data); *computing metrics* against
+absent substrate truth is the logically circular operation the
+`project_iafdb_eval_catch22` memory warns about. So the CLI writes
+predictions either way and only ever skips the metric block — it never
+fabricates AUROC against missing labels. `build_eval_dataset` carries a
+matching tolerance: it falls back to a zero-label placeholder (discarded
+during inference) rather than raising on an unlabeled bank.
+
+One deliberate non-feature:
+
+- **No metrics file.** The raw logits + labels live on the predictions
+  bank; any metric (or recomputation at a different threshold) can be
+  re-derived from there. Writing a separate metrics file would duplicate
+  the information and create two sources of truth.
 
 ## The export CLI
 
@@ -343,18 +358,80 @@ explicit.
 
 | Artifact | Producer | Schema | Lives next to |
 |---|---|---|---|
-| `best.pt` | training loop, when val metric improves | torch dict: `model_state_dict`, `model_meta`, `train_config`, `val_loss`, `val_metrics` | configured `output.checkpoint_dir` |
-| `run.json` | training loop, at end-of-run | `myocard-egm-contracts.training_run_record` | same dir as `best.pt` |
+| `best.pt` | training loop, when val metric improves | torch dict: `model_state_dict`, `model_meta`, `train_config`, `val_loss`, `val_metrics`, `training_provenance` | configured `output.checkpoint_dir` |
+| `run.json` | training loop, at end-of-run | `myocard-egm-contracts.training_run_record` schema 1.1 (carries `run_id` + `produced_model_id` + `trained_on_bank_id`) | same dir as `best.pt` |
 | `metrics.csv` | training loop, at end-of-run | `myocard-egm-contracts.training_metrics` (one row per epoch) | same dir as `best.pt` |
-| `<stem>_pred.cbank.h5` | eval CLI | `myocard-egm-contracts.classifier_bank` with `ClassifierPrediction` populated | sibling to input bank |
+| `<stem>_pred.cbank.h5` | eval CLI | egm-data `ClassifierBank` (an egm-data format, *not* a contracts schema) with `ClassifierPrediction` populated + a stable `lpred_`/`upred_` `id` | sibling to input bank |
 | `<name>.onnx` | export CLI | ONNX graph (calibrated logits) | configured `output.dir` |
-| `<name>.model_metadata.json` | export CLI | `myocard-egm-contracts.egm_class_model_metadata` schema 1.1 | sibling to `.onnx` |
+| `<name>.model_metadata.json` | export CLI | `myocard-egm-contracts.egm_class_model_metadata` schema 1.2 (adds top-level `model_id`) | sibling to `.onnx` |
 
 Note the asymmetry between train and eval outputs: training writes
 two files (`run.json` + `metrics.csv`) because the per-epoch CSV is
 the friendly tabular form and `run.json` is the audit/JSON form; eval
 writes only the predictions bank because the metrics print to stdout
 (eval is one-shot; there's no per-epoch history to summarize).
+
+## Cross-artifact stable IDs
+
+As of v0.4.0 (consuming the egm-contracts v0.5.x linkage schemas), every
+tracked artifact carries a stable `ArtifactId`
+(`<role>_<descriptor>_<YYYY-MM-DD>`) and the relationship pointers that
+turn the set of artifacts into a provenance graph. egm-classifier is the
+*consumer* end — it closes the chain the producers (iafdb-pipeline,
+synthetic-egm-pipeline) opened.
+
+**Where the ids come from.** A single config descriptor —
+`output.run_name` in the train YAML — seeds all of them, so one run's
+record, model, and predictions read coherently (`run_v1_5_…` /
+`model_v1_5_…` / `lpred_v1_5_…`). The helpers live in `ids.py`
+(`derive_run_id`, `derive_model_id`, `derive_predictions_bank_id`,
+`validate_artifact_id`); the pattern itself is single-sourced in
+egm-contracts' `common.ArtifactId` and only *composed + validated* here.
+
+**How they flow** (the key design call — no sibling `run.json` needed
+downstream):
+
+```
+train_cmd
+  ├─ run_id, produced_model_id  ← derive_*(output.run_name)
+  ├─ trained_on_bank_id         ← bank.id
+  ├─ run.json   ← stamps all three (top-level fields)
+  └─ best.pt    ← embeds the same trio in `training_provenance`
+                      │
+        ┌─────────────┴──────────────┐
+        ▼                            ▼
+   export_cmd                    eval_cmd
+   reads ckpt.training_provenance   reads ckpt.training_provenance
+   → model_metadata.model_id        → derives lpred_/upred_ from
+     (= produced_model_id)            run_name + labeled-ness
+   → run_id/bank_id as breadcrumbs  → stamps produced_model_id into
+                                       each trace's trace_metadata
+```
+
+The trainer embedding `training_provenance` into the checkpoint is what
+lets export + eval auto-read the ids without locating a sibling
+`run.json` (closes task #286's provenance-plumbing half; the
+`fs_hz`/`bandpass_hz`-from-`run.json` downsample policy is separate and
+still open — see `roadmap.md`).
+
+**The model→predictions link lives in `trace_metadata` (for now).** The
+predictions bank is an egm-data `ClassifierBank`, whose only id-bearing
+fields are its own `id` (the `lpred_`/`upred_`) and the source banks'
+ids in `banks[]`. There is no dedicated field for "which model produced
+these predictions," so eval records the producing `model_id` in each
+trace's generic `trace_metadata` dict under a single named constant
+(`eval.predictions.PREDICTION_MODEL_ID_KEY = "produced_by_model_id"`).
+This is deliberately the short-term home — the long-term option (a
+`ClassifierPrediction.model_id` field or a bank-level metadata dict) is
+an egm-data schema change deferred until egm-studio's manifest curation
+actually consumes the edge. Keeping it behind one constant makes that
+migration a single-point change. The source-bank ref needs no such
+workaround: it's already structural in `banks[]`.
+
+**Optional override.** The eval YAML's `output.bank_id` overrides the
+derived predictions-bank id verbatim (validated against `ArtifactId`, so
+a malformed value fails fast); train has no override because `run_name`
+is the natural seed.
 
 ## Testing strategy
 
@@ -382,10 +459,13 @@ actually run their parity check end-to-end.
 Three sibling pins:
 
 ```
-myocard-egm-contracts @ git+...@v0.4.0  # schemas
-myocard-egm-data[torch] @ git+...@v0.3.3  # bank I/O + datasets + records
+myocard-egm-contracts @ git+...@v0.5.1  # schemas (incl. ArtifactId)
+myocard-egm-data[torch] @ git+...@v0.4.0  # bank I/O + datasets + records
 myocard-egm-signal     @ git+...@v0.2.0  # temperature_scaling
 ```
+
+Plus `pydantic>=2` as a direct dep (imported by name in `ids.py` to
+validate stable artifact ids; also transitive via egm-contracts).
 
 Plus one runtime cap:
 
@@ -394,9 +474,10 @@ numpy>=1.26,<2.5  # via egm-contracts; PEP 695 stubs in numpy 2.5 break
                   # mypy under python_version="3.10"
 ```
 
-When egm-contracts ships a breaking schema change (as v0.3.0 → v0.4.0
-just did with the per-trace normalization redesign), egm-data has to
-re-pin first, then egm-classifier. The cascade is captured in
+When egm-contracts ships a schema change (most recently the v0.5.0
+cross-artifact-linkage wave that added `ArtifactId` + the stable-id
+fields this package now stamps), egm-data has to re-pin first, then
+egm-classifier. The cascade is captured in
 `intracardiac-platform/project/refactor_checklist.md`.
 
 The `[onnx]` extra (`onnx`, `onnxruntime`, `onnxscript`) is

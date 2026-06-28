@@ -259,6 +259,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Wrote metadata to {written}")
     print()
     print("Export complete:")
+    prov = ckpt.get("training_provenance", {})
+    model_id = prov.get("produced_model_id") if isinstance(prov, dict) else None
+    if model_id:
+        print(f"  model_id: {model_id}")
     print(f"  {onnx_path.name}    ({onnx_path.stat().st_size / 1024:.1f} KiB)")
     print(f"  {written.name}      ({written.stat().st_size / 1024:.1f} KiB)")
     return 0

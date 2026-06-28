@@ -283,6 +283,25 @@ def test_loader_kwargs_carries_strategy_instance(tmp_path: Path) -> None:
     assert kwargs["split_strategy"].n_bins == 4
 
 
+def test_output_run_name_parsed_and_serialized(tmp_path: Path) -> None:
+    """``output.run_name`` reaches the typed config and the run.json config dict."""
+    cfg_path = _write_yaml(
+        tmp_path,
+        "data:\n  bank: ./x.h5\noutput:\n  run_name: v1_5_courtemanche\n",
+    )
+    cfg = build_train_config(load_yaml(cfg_path))
+    assert cfg.output.run_name == "v1_5_courtemanche"
+    d = experiment_config_to_dict(cfg)
+    assert d["output"]["run_name"] == "v1_5_courtemanche"
+
+
+def test_output_run_name_defaults_to_empty(tmp_path: Path) -> None:
+    """Absent ``output.run_name`` leaves the descriptor empty (ids.py defaults it)."""
+    cfg_path = _write_yaml(tmp_path, "data:\n  bank: ./x.h5\n")
+    cfg = build_train_config(load_yaml(cfg_path))
+    assert cfg.output.run_name == ""
+
+
 def test_experiment_config_to_dict_is_json_serializable(tmp_path: Path) -> None:
     """The dict we hand to TrainingRunRecord.config has no Path / tuple types."""
     import json

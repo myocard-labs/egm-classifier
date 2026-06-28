@@ -203,12 +203,16 @@ def train(
     config: TrainConfig,
     checkpoint_dir: Path | None = None,
     model_meta: dict[str, Any] | None = None,
+    training_provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the full training loop; returns a history dict and writes ``best.pt``.
 
     ``model_meta`` (architecture args + data info) is embedded in the
     checkpoint so eval/export can rebuild the model without re-deriving
-    it. ``history["epochs"]`` is a list of Pydantic :class:`EpochRecord`
+    it. ``training_provenance`` (run_id, produced_model_id,
+    trained_on_bank_id, run_name) is embedded too, so export + eval can
+    read the stable cross-artifact ids without a sibling run.json.
+    ``history["epochs"]`` is a list of Pydantic :class:`EpochRecord`
     instances ready for :func:`reporting.write_run`.
     """
     model.to(device)
@@ -290,6 +294,7 @@ def train(
                 "val_metrics": {k: v for k, v in val_metrics.items() if k != "reliability"},
                 "train_config": asdict(config),
                 "model_meta": model_meta or {},
+                "training_provenance": training_provenance or {},
             }
             torch.save(ckpt, checkpoint_dir / "best.pt")
             print(f"  -> new best ({config.select_metric}={best_score:.3f}), saved best.pt")
