@@ -15,10 +15,10 @@ deferred until the polyrepo refactor settles).
 
 ```bash
 # Base install — training + eval CLIs.
-pip install git+https://github.com/myocard-labs/egm-classifier.git@v0.1.0
+pip install git+https://github.com/myocard-labs/egm-classifier.git@v0.4.0
 
 # With the ONNX export toolchain (onnx + onnxruntime + onnxscript).
-pip install "git+https://github.com/myocard-labs/egm-classifier.git@v0.1.0#egg=myocard-egm-classifier[onnx]"
+pip install "git+https://github.com/myocard-labs/egm-classifier.git@v0.4.0#egg=myocard-egm-classifier[onnx]"
 ```
 
 The `[onnx]` extra is kept optional so training-only images (Docker,
@@ -29,11 +29,15 @@ extra to install.
 
 Three sibling packages get pulled in automatically:
 
-- `myocard-egm-contracts==0.4.0` — JSON Schemas + Pydantic models.
-- `myocard-egm-data[torch]==0.3.3` — `ClassifierBank` I/O,
+- `myocard-egm-contracts==0.5.1` — JSON Schemas + Pydantic models
+  (the stable cross-artifact `ArtifactId` pattern lives here).
+- `myocard-egm-data[torch]==0.4.0` — `ClassifierBank` I/O,
   `EGMTraceDataset`, patient-aware splits, `TraceTransform`.
 - `myocard-egm-signal==0.2.0` — temperature-scaling primitive used
   by the export CLI's calibration step.
+
+`pydantic>=2` is also a direct dependency (it validates stable artifact
+ids); it arrives transitively via egm-contracts regardless.
 
 ## CLI reference
 
@@ -68,8 +72,12 @@ egm-class-train CONFIG.yaml [--bank PATH] [--epochs N] [--width F]
   `model_state_dict` + `model_meta` + `train_config` + `val_loss` +
   `val_metrics`.
 - `run.json` — `TrainingRunRecord` Pydantic dump: full config snapshot
-  + per-epoch records + held-out test metrics + run identity (UUID,
-  host, git SHA, wall times).
+  + per-epoch records + held-out test metrics + run identity (host, git
+  SHA, wall times) + the stable cross-artifact ids `run_id`,
+  `produced_model_id`, and `trained_on_bank_id` (see "Stable artifact
+  ids" below). The same ids are embedded in `best.pt`'s
+  `training_provenance` so export + eval read them without a sibling
+  `run.json`.
 - `metrics.csv` — one row per epoch with the scalar metrics; the
   friendly tabular form of `run.json`'s `epochs` block.
 
@@ -95,15 +103,23 @@ egm-class-eval CONFIG.yaml [--checkpoint PATH] [--bank PATH]
 
 - `<input_stem>_pred.cbank.h5` — sibling `ClassifierBank` with
   `ClassifierPrediction` populated on every trace (`label_pred`,
-  `label_prob`, raw `pred_logits`). No separate metrics file — the
-  logits + labels live on this bank, so any metric can be
-  re-derived.
-- **Stdout summary** — `n`, `accuracy`, `auroc`, `f1`, `precision`,
-  `recall`, `ece`, confusion matrix.
+  `label_prob`, raw `pred_logits`). It carries its own stable id —
+  `lpred_<run_name>_<date>` (labeled input) or
+  `upred_<run_name>_<date>` (unlabeled input), with `run_name` read
+  from the checkpoint's provenance — and the producing model's id is
+  stamped into each trace's `trace_metadata` under
+  `produced_by_model_id`. No separate metrics file — the logits +
+  labels live on this bank, so any metric can be re-derived.
+- **Stdout summary** (labeled input only) — `n`, `accuracy`, `auroc`,
+  `f1`, `precision`, `recall`, `ece`, confusion matrix.
 
-Eval assumes every trace has `label_truth`. Unlabeled bank inference
-is intentionally not supported (see `project/architecture.md` for
-the reasoning).
+Both labeled and unlabeled banks are supported. A fully-labeled bank
+yields a scored eval (`lpred_` bank + the metric bundle); an unlabeled
+bank (the IAFDB shape) yields a `upred_` bank with predictions written
+but metrics skipped — substrate-truth metrics can't be computed without
+labels and aren't faked. See `project/architecture.md` and the
+`project_iafdb_eval_catch22` memory for why metric-based IAFDB eval is
+off the table.
 
 ### `egm-class-export`
 
@@ -133,9 +149,12 @@ egm-class-export CONFIG.yaml [--checkpoint PATH] [--calibration-bank PATH]
   export time and baked into the graph, the runtime gets
   `logits / T` directly.
 - `<output.name>.model_metadata.json` — the deployment-time sidecar
-  (`egm_class_model_metadata` schema 1.1): sha256 + size_bytes,
-  preprocessing constants, decision threshold + class labels,
-  training provenance with the fitted `T` recorded for audit.
+  (`egm_class_model_metadata` schema 1.2): sha256 + size_bytes,
+  preprocessing constants, decision threshold + class labels, the
+  model's own stable `model_id` (read from the checkpoint's
+  `produced_model_id`), and training provenance — the fitted `T` plus
+  the `run_id` / `trained_on_bank_id` / `run_name` breadcrumbs carried
+  over from the checkpoint.
 
 The CLI refuses to overwrite existing output files; pass
 `--output-name` to a fresh value or delete the existing files first.
@@ -154,7 +173,7 @@ loud `ConfigError` at load time — typos don't get silently dropped.
 ```yaml
 # REQUIRED — path to a ClassifierBank HDF5 (label_truth on every trace).
 data:
-  bank: ../banks/hybrid_v1.cbank.h5
+  bank: ../banks/noise_mixed_v1.cbank.h5
   batch_size: 64                  # default
   num_workers: 0                  # default
   znorm: true                     # per-trace z-score (v1 default)
@@ -196,6 +215,9 @@ train:
 output:
   checkpoint_dir: ../checkpoints/v1_baseline
   description: "v1 baseline run"
+  run_name: v1_baseline          # descriptor for the run's stable ids
+                                 # (run_<run_name>_<date> + model_<run_name>_<date>);
+                                 # omit to fall back to 'egm_classifier'
 ```
 
 ### `egm-class-eval` config
@@ -218,6 +240,10 @@ output:
   # Default is sibling <input_stem>_pred.cbank.h5; override here for a
   # custom destination.
   predictions_bank: ../predictions/v1_baseline_pred.cbank.h5
+  # OPTIONAL — stable id for the predictions bank. Omit to derive it
+  # automatically: lpred_<run_name>_<date> (labeled input) or
+  # upred_<run_name>_<date> (unlabeled input). Set to override verbatim.
+  bank_id: lpred_v1_baseline_holdout_2026-06-27
 
 # OPTIONAL — decision threshold (range (0, 1)).
 threshold: 0.5                    # default
@@ -269,6 +295,43 @@ The `preprocessing.fs_hz` + `bandpass_hz` requirement (no defaults)
 is intentional — these depend on the trained model. See
 `project/architecture.md` for why they're not derived from the
 calibration bank.
+
+## Stable artifact IDs
+
+Every tracked artifact this package writes carries a stable
+cross-artifact id — the egm-contracts `ArtifactId` pattern,
+`<role>_<descriptor>_<YYYY-MM-DD>`. They let a downstream provenance
+index answer "what produced what" without parsing file contents:
+
+| Artifact | Field | Shape | Role prefix |
+|---|---|---|---|
+| Training run (`run.json`) | `run_id` | `run_<run_name>_<date>` | `run_` |
+| Exported model (`model_metadata.json`) | `model_id` | `model_<run_name>_<date>` | `model_` |
+| Predictions bank (`_pred.cbank.h5`) | `id` | `lpred_<run_name>_<date>` (labeled) / `upred_<run_name>_<date>` (unlabeled) | `lpred_` / `upred_` |
+
+`run_name` is the single human-chosen descriptor: set it once in the
+train YAML (`output.run_name`) and it threads through the run, the model,
+and any predictions bank produced from that model. Omit it and
+everything falls back to `egm_classifier`. Dates are stamped at write
+time (UTC).
+
+Relationship pointers ride alongside the ids so the graph has edges, not
+just nodes:
+
+- `run.json` records `trained_on_bank_id` (the bank the run trained on)
+  and `produced_model_id` (the model it will export to).
+- The model sidecar's `training_provenance` carries `run_id` +
+  `trained_on_bank_id` back-links (the model's own id is the top-level
+  `model_id`).
+- The predictions bank records the producing model's id in **each
+  trace's `trace_metadata`** under `produced_by_model_id` (a short-term
+  home until a dedicated field lands), and the source bank via its
+  embedded `banks[]` provenance entries.
+
+Each producer derives its ids automatically; pass `output.bank_id` in
+the eval YAML to override the predictions-bank id verbatim (it's
+validated against the `ArtifactId` pattern, so a malformed value fails
+fast).
 
 ## End-to-end walkthroughs
 

@@ -23,7 +23,7 @@ checkpoint: ../checkpoints/v1_baseline_bin/best.pt
 # logits, no calibration. The other fields are DataLoader knobs and
 # only matter when ``bank`` is set.
 calibration:
-  bank: ../banks/synthegm_v1_hybrid_small.classifier.h5
+  bank: ../banks/synthegm_v1_noise_mixed_small.classifier.h5
   batch_size: 64
   num_workers: 0
   pin_memory: false

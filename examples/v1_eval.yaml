@@ -10,9 +10,12 @@
 checkpoint: ../checkpoints/v1_baseline_bin/best.pt
 
 data:
-  # Labeled ClassifierBank. The eval CLI does not support unlabeled
-  # banks (see project_iafdb_eval_catch22).
-  bank: ../banks/synthegm_v1_hybrid_small.classifier.h5
+  # ClassifierBank to score. A fully-labeled bank yields a scored eval
+  # (lpred_ predictions bank + the stdout metric bundle); an unlabeled
+  # bank (the IAFDB shape) yields a upred_ predictions bank with metrics
+  # skipped — substrate-truth metrics can't be computed there, only
+  # qualitative inspection (see project_iafdb_eval_catch22).
+  bank: ../banks/synthegm_v1_noise_mixed.classifier.h5
   batch_size: 64
   num_workers: 0
   znorm: true                   # must match the training-time setting
@@ -27,3 +30,8 @@ output:
   # Sibling predictions bank. Omit to derive automatically:
   # <input_stem>_pred.cbank.h5 next to the input.
   predictions_bank: ../predictions/v1_baseline_test_pred.cbank.h5
+  # Stable id for the predictions bank. Omit to derive automatically from
+  # the producing run's name + labeled-ness: lpred_<run_name>_<date>
+  # (labeled) or upred_<run_name>_<date> (unlabeled). Set explicitly to
+  # override, e.g.:
+  #   bank_id: lpred_v1_baseline_holdout_2026-06-27

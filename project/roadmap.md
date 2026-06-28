@@ -49,6 +49,34 @@ training-only images don't pull the deployment toolchain;
 `egm-class-export` catches the import failure at runtime and points
 the user at the extra.
 
+## v0.4.0 — stable cross-artifact IDs (shipped)
+
+Consumes the egm-contracts v0.5.x cross-artifact-linkage schemas.
+egm-classifier is the *consumer* end that closes the provenance graph
+the producers (iafdb-pipeline, synthetic-egm-pipeline) opened.
+
+- **Train** stamps `run_id` + `produced_model_id` (derived from the new
+  `output.run_name` descriptor) and `trained_on_bank_id` (the training
+  bank's id) onto `run.json`, and embeds the same trio in `best.pt`'s
+  `training_provenance`.
+- **Export** reads the checkpoint's `training_provenance` and surfaces
+  `produced_model_id` as the metadata sidecar's top-level `model_id`
+  (`egm_class_model_metadata` schema 1.2); `run_id` + `trained_on_bank_id`
+  + `run_name` thread through as provenance breadcrumbs.
+- **Eval** stamps the predictions bank with a derived `lpred_` (labeled)
+  or `upred_` (unlabeled) id — overridable via `output.bank_id` — and
+  records the producing model's id in each trace's `trace_metadata`
+  under `produced_by_model_id` (the short-term home; see
+  `architecture.md` §"Cross-artifact stable IDs").
+- **Eval now supports unlabeled banks** (`upred_`, metrics skipped) —
+  the IAFDB-inspection path the old labeled-only eval rejected. Only the
+  metric *computation* is skipped (no substrate truth); the predictions
+  are still written.
+
+Pins bumped: `myocard-egm-contracts v0.4.0 → v0.5.1`,
+`myocard-egm-data[torch] v0.3.3 → v0.4.0` (signal stays `v0.2.0`);
+`pydantic>=2` added as a direct dep.
+
 ## v0.2.0+ — concrete next steps
 
 These are sized for "could land in one focused PR each." Items
@@ -83,6 +111,13 @@ training side didn't have to grow a new code path mid-port.
 ### `run.json` as the export-config source (downsample policy) — component-internal cleanup
 
 > → Component-internal cleanup; tracked as task #286. Do anytime; doesn't need a project-phase home. Pairs naturally with the `filters.decimation` work scheduled in egm-signal under Phase 1.5.
+
+> **Status (v0.4.0):** the provenance-plumbing half of #286 shipped —
+> the trainer embeds its cross-artifact ids in `best.pt`'s
+> `training_provenance` and export + eval auto-read them, so export no
+> longer needs to locate a sibling `run.json` for *ids*. What remains
+> below is specifically the `fs_hz`/`bandpass_hz` downsample policy
+> (still YAML-duplicated).
 
 The export YAML currently duplicates `fs_hz` and `bandpass_hz` from
 the training pipeline — typo-prone, no enforcement that the values
@@ -237,9 +272,11 @@ components.
 
 ## Schema bumps to coordinate
 
-None currently planned. The most recent change was
-`egm-contracts` v0.4.0 (per-trace normalization in
-`egm_class_model_metadata` schema 1.1); no follow-up bumps are
+None currently planned. The most recent change was the
+`egm-contracts` v0.5.0 cross-artifact-linkage wave (consumed in
+egm-classifier v0.4.0): `egm_class_model_metadata` → schema 1.2
+(`model_id`) and `training_run_record` → schema 1.1 (`run_id` +
+`produced_model_id` + `trained_on_bank_id`). No follow-up bumps are
 expected for the v0.2.0+ items above unless the `run.json`
 preprocessing extension (`v0.2.0+ — concrete next steps` §2) needs
 new `training_run_record` fields.

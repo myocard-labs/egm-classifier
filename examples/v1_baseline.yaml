@@ -18,7 +18,7 @@ data:
   # Path to a ClassifierBank HDF5 written by synthetic-egm-pipeline or
   # iafdb-pipeline. Labels are baked in at conversion time; the
   # classifier does not re-threshold.
-  bank: ../banks/synthegm_v1_hybrid_small_gd.classifier.h5
+  bank: ../banks/synthegm_v1_noise_mixed_small_gd.classifier.h5
   batch_size: 64
   num_workers: 0
   znorm: true                  # per-trace z-score normalization (Sec. 11)
@@ -54,3 +54,7 @@ train:
 output:
   checkpoint_dir: ../checkpoints/v1_baseline
   description: "Phase 1 baseline — 1D MobileViT width=1.0, synthetic clean bank, patient-aware split."
+  # Descriptor for this run's stable cross-artifact ids: run_<run_name>_<date>
+  # (the run record's run_id) and model_<run_name>_<date> (the exported
+  # model_id). Sanitized to [a-z0-9_]; omit to fall back to 'egm_classifier'.
+  run_name: v1_baseline
