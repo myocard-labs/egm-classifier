@@ -35,7 +35,6 @@ import datetime as _dt
 import socket
 import subprocess
 import sys
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +58,7 @@ from myocard_egm_classifier.cli._train_config import (
     model_meta_from_config,
     to_train_runtime_config,
 )
+from myocard_egm_classifier.ids import derive_model_id, derive_run_id
 from myocard_egm_classifier.models import count_parameters
 from myocard_egm_classifier.training import evaluate, train, write_run
 from myocard_egm_classifier.training.train import _make_loss
@@ -126,6 +126,7 @@ def _run_meta(
     started_utc: str,
     ended_utc: str,
     bundle_info: dict[str, Any],
+    run_id: str,
 ) -> dict[str, Any]:
     """Assemble the ``run`` block for the TrainingRunRecord.
 
@@ -136,7 +137,7 @@ def _run_meta(
     """
     assert cfg.data.bank is not None  # validated upstream by build_train_config
     return {
-        "run_id": str(uuid.uuid4()),
+        "run_id": run_id,
         "git_sha": _git_sha(),
         "host": socket.gethostname(),
         "model_version": "egm_classifier_phase1_mobilevit_1d",
@@ -176,6 +177,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR reading bank: {exc}", file=sys.stderr)
         return 1
 
+    # Stable cross-artifact ids (egm-contracts v0.5.0). Derived from the
+    # config-provided run name (output.run_name; falls back to a default).
+    # The training bank's own id is the trained_on_bank link; both the
+    # run.json and the checkpoint's training_provenance carry the trio so
+    # export + eval can read them without a sibling run.json.
+    run_id = derive_run_id(cfg.output.run_name)
+    produced_model_id = derive_model_id(cfg.output.run_name)
+    trained_on_bank_id = bank.id
+    training_provenance = {
+        "run_id": run_id,
+        "produced_model_id": produced_model_id,
+        "trained_on_bank_id": trained_on_bank_id,
+        "run_name": cfg.output.run_name or None,
+        "git_sha": _git_sha(),
+    }
+
     try:
         bundle = build_dataloaders(bank, **loader_kwargs_from_config(cfg))
     except ValueError as exc:
@@ -211,6 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         runtime_cfg,
         checkpoint_dir=cfg.output.checkpoint_dir,
         model_meta=model_meta_from_config(cfg.model),
+        training_provenance=training_provenance,
     )
 
     # Final held-out test metrics (best checkpoint would be re-loaded for
@@ -232,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
         started_utc=started_utc,
         ended_utc=ended_utc,
         bundle_info=info,
+        run_id=run_id,
     )
     csv_path, json_path = write_run(
         cfg.output.checkpoint_dir,
@@ -241,6 +260,9 @@ def main(argv: list[str] | None = None) -> int:
         select_metric=cfg.train.select_metric,
         test_loss=test_loss if test_metrics else None,
         test_metrics=test_metrics or None,
+        run_id=run_id,
+        trained_on_bank_id=trained_on_bank_id,
+        produced_model_id=produced_model_id,
     )
     print(f"Wrote {csv_path.name} + {json_path.name} to {cfg.output.checkpoint_dir}")
     return 0

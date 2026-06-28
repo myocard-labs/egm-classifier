@@ -89,9 +89,16 @@ class EvalOutputCLIConfig:
     writes with ``ClassifierPrediction`` populated on every trace.
     When ``None``, the CLI derives a sibling path from the input
     bank: ``<input_stem>_pred.cbank.h5``.
+
+    ``bank_id`` optionally overrides the predictions bank's stable
+    cross-artifact id. When ``None``, the CLI derives
+    ``lpred_<run_name>_<date>`` (labeled input) or
+    ``upred_<run_name>_<date>`` (unlabeled input) from the eval-time
+    labeled-ness and the producing run's name.
     """
 
     predictions_bank: Path | None = None
+    bank_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -122,7 +129,7 @@ _EVAL_DATA_KEYS = {
     "znorm_eps",
     "pin_memory",
 }
-_EVAL_OUTPUT_KEYS = {"predictions_bank"}
+_EVAL_OUTPUT_KEYS = {"predictions_bank", "bank_id"}
 
 
 def build_eval_config(doc: dict[str, Any]) -> EvalExperimentConfig:
@@ -182,7 +189,9 @@ def _build_eval_output_block(block: dict[str, Any], config_dir: Path) -> EvalOut
     _reject_unknown_keys(block, _EVAL_OUTPUT_KEYS, label="output")
     raw = block.get("predictions_bank")
     predictions_bank = _resolve_path(str(raw) if raw is not None else None, config_dir)
-    return EvalOutputCLIConfig(predictions_bank=predictions_bank)
+    bank_id_raw = block.get("bank_id")
+    bank_id = str(bank_id_raw) if bank_id_raw is not None else None
+    return EvalOutputCLIConfig(predictions_bank=predictions_bank, bank_id=bank_id)
 
 
 # ---------------------------------------------------------------------------
