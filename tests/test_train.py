@@ -17,12 +17,15 @@ What's exercised:
 
 from __future__ import annotations
 
+import dataclasses
+import json
 from pathlib import Path
 
 import torch
-from myocard_egm_data.banks import ClassifierBank
+from myocard_egm_data.banks import ClassifierBank, write_classifier_bank
 from myocard_egm_data.datasets import LoaderBundle, build_dataloaders
 
+from myocard_egm_classifier.cli.train_cmd import main as train_main
 from myocard_egm_classifier.models import MobileViT1D, default_v1_blocks
 from myocard_egm_classifier.training import (
     EpochRecord,
@@ -118,3 +121,60 @@ def test_one_epoch_smoke(tiny_classifier_bank: ClassifierBank, tmp_path: Path) -
     assert isinstance(test_loss, float)
     assert "auroc" in test_metrics
     assert "reliability" in test_metrics
+
+
+def test_train_cmd_stamps_cross_artifact_ids(
+    tiny_classifier_bank: ClassifierBank, tmp_path: Path
+) -> None:
+    """End-to-end train CLI: the run.json + checkpoint carry the derived
+    run_id / produced_model_id / trained_on_bank_id, the run block's run_id
+    mirrors the top-level one, and the descriptor comes from output.run_name.
+    """
+    # Give the input bank a stable id so trained_on_bank_id has something to
+    # reference (a freshly-converted bank loads with id=None).
+    bank_with_id = dataclasses.replace(tiny_classifier_bank, id="tbank_train_smoke_2026-06-27")
+    bank_path = tmp_path / "train.cbank.h5"
+    write_classifier_bank(bank_with_id, bank_path)
+
+    ckpt_dir = tmp_path / "ckpt"
+    cfg_path = tmp_path / "train.yaml"
+    cfg_path.write_text(
+        f"""\
+data:
+  bank: {bank_path}
+  batch_size: 8
+  split_fractions: [0.6, 0.2, 0.2]
+  split_seed: 0
+model:
+  width_multiplier: 0.5
+  num_classes: 1
+  input_length: 64
+train:
+  epochs: 1
+  warmup_frac: 0.0
+output:
+  checkpoint_dir: {ckpt_dir}
+  run_name: train_smoke
+""",
+        encoding="utf-8",
+    )
+
+    rc = train_main([str(cfg_path), "--device", "cpu"])
+    assert rc == 0
+
+    # run.json carries the derived ids at top level (descriptor = run_name).
+    run_doc = json.loads((ckpt_dir / "run.json").read_text(encoding="utf-8"))
+    assert run_doc["run_id"].startswith("run_train_smoke_")
+    assert run_doc["produced_model_id"].startswith("model_train_smoke_")
+    assert run_doc["trained_on_bank_id"] == "tbank_train_smoke_2026-06-27"
+    # The free-form run block's run_id mirrors the top-level run_id.
+    assert run_doc["run"]["run_id"] == run_doc["run_id"]
+
+    # The checkpoint embeds the same provenance so export + eval can read it
+    # without a sibling run.json.
+    ckpt = torch.load(ckpt_dir / "best.pt", map_location="cpu", weights_only=False)
+    prov = ckpt["training_provenance"]
+    assert prov["run_id"] == run_doc["run_id"]
+    assert prov["produced_model_id"] == run_doc["produced_model_id"]
+    assert prov["trained_on_bank_id"] == "tbank_train_smoke_2026-06-27"
+    assert prov["run_name"] == "train_smoke"

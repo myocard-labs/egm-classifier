@@ -31,6 +31,12 @@ from myocard_egm_data.banks import (
     write_classifier_bank,
 )
 
+# Source-bank stable id for the fixture. egm-data (ClassifierBank >= 0.2)
+# replaced the old integer per-source index with a stable cross-artifact
+# id string (egm-contracts ArtifactId pattern), validated on construction —
+# so traces + the source-bank entry reference the source by this string.
+_FIXTURE_BANK_ID = "tbank_fixture_2026-06-27"
+
 
 def _make_signal(rng: np.random.Generator, n_samples: int, label: int) -> np.ndarray:
     """Generate a deterministic per-label synthetic trace.
@@ -70,7 +76,7 @@ def tiny_classifier_bank() -> ClassifierBank:
             sig = _make_signal(rng, n_samples, label)
             traces.append(
                 ClassifierTrace(
-                    bank_id=0,
+                    bank_id=_FIXTURE_BANK_ID,
                     signal=sig,
                     freq_hz=1000.0,
                     amp_type="mv",
@@ -84,7 +90,7 @@ def tiny_classifier_bank() -> ClassifierBank:
                 )
             )
     bank_md = ClassifierBankMetaData(
-        bank_id=0,
+        bank_id=_FIXTURE_BANK_ID,
         bank_type="synthetic",
         bank_path="<in-memory fixture>",
         bank_metadata={"fixture": "tiny_classifier_bank"},
