@@ -20,15 +20,19 @@ Conventions:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import pytest
+from myocard_egm_contracts import synthetic_bank as synthetic_bank_models
+from myocard_egm_contracts.schema_info import current_version
 from myocard_egm_data.banks import (
     ClassifierBank,
     ClassifierBankMetaData,
     ClassifierTrace,
     write_classifier_bank,
+    write_synthetic_bank,
 )
 
 # Source-bank stable id for the fixture. egm-data (ClassifierBank >= 0.2)
@@ -108,3 +112,81 @@ def tiny_bank_path(tmp_path: Path, tiny_classifier_bank: ClassifierBank) -> Path
     out_path = tmp_path / "tiny.h5"
     write_classifier_bank(tiny_classifier_bank, out_path)
     return out_path
+
+
+# --- ported from egm-data's conftest when the dataset layer moved here (Step 8) ---
+
+
+@pytest.fixture
+def fs_hz() -> float:
+    return 1000.0
+
+
+@pytest.fixture
+def trace_duration_ms() -> float:
+    return 512.0
+
+
+@pytest.fixture
+def n_samples(fs_hz: float, trace_duration_ms: float) -> int:
+    return round(trace_duration_ms * 1e-3 * fs_hz)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+@pytest.fixture
+def synthetic_bank_path(
+    tmp_path: Path, fs_hz: float, trace_duration_ms: float, n_samples: int
+) -> Path:
+    """Tiny Pydantic SyntheticBank written to HDF5 (2 patients x 3 traces).
+
+    Signals are random — physiological realism isn't needed for the dataset/split tests.
+    """
+    rng = np.random.default_rng(0)
+    n = 6
+    signal = [rng.standard_normal(n_samples).astype(np.float32).tolist() for _ in range(n)]
+    sim_id = [0, 0, 0, 1, 1, 1]
+    pair_index = [0, 1, 2, 0, 1, 2]
+    electrode_row = [0, 0, 1, 0, 0, 1]
+    densities = [0.0, 0.0, 0.0, 0.3, 0.3, 0.3]
+
+    pyd_bank = synthetic_bank_models.SyntheticBank.model_validate(
+        {
+            "schema_version": current_version("synthetic_bank"),
+            "created_utc": _now_iso(),
+            "bank_id": "tbank_synthetic_test_2026-06-27",
+            "description": "Synthetic bank test fixture",
+            "fs_hz": fs_hz,
+            "trace_duration_ms": trace_duration_ms,
+            "simulator": "finitewave",
+            "cell_model": "aliev_panfilov",
+            "patch_size_mm": 40.0,
+            "patch_dr_mm": 0.25,
+            "ap_time_unit_ms": 12.9,
+            "fibrosis_strategy_name": "uniform_random",
+            "fibrosis_params": {"density_min": 0.0, "density_max": 0.5},
+            "electrode_config": {"grid_rows": 5, "grid_cols": 5, "spacing_mm": 2.0},
+            "mixer_config": {"snr_db_min": 10.0, "snr_db_max": 25.0},
+            "experiment_config": {"name": "test_fixture"},
+            "noise_bank_source": "iafdb_noise_v1.h5",
+            "traces": {
+                "signal": signal,
+                "simulation_id": sim_id,
+                "pair_index": pair_index,
+                "electrode_row": electrode_row,
+                "fibrosis_density": densities,
+                "fibrosis_density_realized": densities,
+                "electrode_height_mm": [0.5] * n,
+                "seed": [i * 100 for i in range(n)],
+                "snr_db": [15.0] * n,
+                "stim_edge": ["left"] * n,
+                "noise_record": ["iaf1_afw"] * n,
+                "noise_channel": ["CS12"] * n,
+            },
+        }
+    )
+    path = tmp_path / "synthetic_bank.h5"
+    write_synthetic_bank(pyd_bank, path)
+    return path

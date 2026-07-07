@@ -28,15 +28,15 @@ from __future__ import annotations
 
 import numpy as np
 import torch
-from myocard_egm_data.augmentation import TraceTransform
 from myocard_egm_data.banks import ClassifierBank
-from myocard_egm_data.datasets import EGMTraceDataset
 from myocard_egm_signal.model.temperature_scaling import fit_temperature
 from numpy.typing import NDArray
 from torch import nn
 from torch.utils.data import DataLoader
 
 from myocard_egm_classifier.constants import DEFAULT_SEED
+from myocard_egm_classifier.data.augmentation import TraceTransform
+from myocard_egm_classifier.data.datasets import EGMTraceDataset
 
 
 def _apply_normalization(batch: torch.Tensor, scheme: str, eps: float) -> torch.Tensor:

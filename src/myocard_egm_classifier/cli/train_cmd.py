@@ -39,7 +39,6 @@ from pathlib import Path
 from typing import Any
 
 from myocard_egm_data.banks import load_classifier_bank
-from myocard_egm_data.datasets import build_dataloaders
 
 from myocard_egm_classifier.cli._common import (
     ConfigError,
@@ -58,6 +57,7 @@ from myocard_egm_classifier.cli._train_config import (
     model_meta_from_config,
     to_train_runtime_config,
 )
+from myocard_egm_classifier.data.datasets import build_dataloaders
 from myocard_egm_classifier.ids import derive_model_id, derive_run_id
 from myocard_egm_classifier.models import count_parameters
 from myocard_egm_classifier.training import evaluate, train, write_run

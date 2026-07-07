@@ -2,7 +2,7 @@
 
 The single public function — :func:`build_eval_dataset` — wraps a
 :class:`ClassifierBank` in a sequential
-:class:`myocard_egm_data.datasets.EGMTraceDataset`: no patient-aware
+:class:`myocard_egm_classifier.data.datasets.EGMTraceDataset`: no patient-aware
 split, no augmentation, bank-order iteration. The bank-order
 guarantee is load-bearing — the CLI then feeds this dataset to the
 top-level :func:`myocard_egm_classifier.inference_helpers.collect_logits`
@@ -13,7 +13,7 @@ Kept in its own module (separate from
 :mod:`myocard_egm_classifier.inference_helpers`, which is the
 training/eval-shared model-runner helper) because dataset
 construction is an eval-only concern — training builds its loaders
-from :func:`myocard_egm_data.datasets.build_dataloaders`, which does
+from :func:`myocard_egm_classifier.data.datasets.build_dataloaders`, which does
 the patient-aware split + augmentation wiring this function
 deliberately bypasses.
 """
@@ -22,11 +22,11 @@ from __future__ import annotations
 
 import numpy as np
 import torch
-from myocard_egm_data.augmentation import TraceTransform
 from myocard_egm_data.banks import ClassifierBank
-from myocard_egm_data.datasets import EGMTraceDataset
 
 from myocard_egm_classifier.constants import DEFAULT_SEED
+from myocard_egm_classifier.data.augmentation import TraceTransform
+from myocard_egm_classifier.data.datasets import EGMTraceDataset
 
 
 def build_eval_dataset(

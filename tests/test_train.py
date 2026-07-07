@@ -23,9 +23,9 @@ from pathlib import Path
 
 import torch
 from myocard_egm_data.banks import ClassifierBank, write_classifier_bank
-from myocard_egm_data.datasets import LoaderBundle, build_dataloaders
 
 from myocard_egm_classifier.cli.train_cmd import main as train_main
+from myocard_egm_classifier.data.datasets import LoaderBundle, build_dataloaders
 from myocard_egm_classifier.models import MobileViT1D, default_v1_blocks
 from myocard_egm_classifier.training import (
     EpochRecord,

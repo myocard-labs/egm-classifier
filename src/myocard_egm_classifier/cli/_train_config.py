@@ -43,12 +43,6 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from myocard_egm_data.splits import (
-    AnyPositiveStrategy,
-    BinnedDensityStrategy,
-    PatientStratificationStrategy,
-)
-
 from myocard_egm_classifier.cli._common import (
     ConfigError,
     _optional,
@@ -82,6 +76,11 @@ from myocard_egm_classifier.constants import (
     DEFAULT_WIDTH_MULTIPLIER,
     DEFAULT_ZNORM,
     DEFAULT_ZNORM_EPS,
+)
+from myocard_egm_classifier.data.splits import (
+    AnyPositiveStrategy,
+    BinnedDensityStrategy,
+    PatientStratificationStrategy,
 )
 from myocard_egm_classifier.models import BlockSpec, MobileViT1D, default_v1_blocks
 from myocard_egm_classifier.training import TrainConfig
@@ -204,7 +203,7 @@ class SplitStrategyConfig:
     The YAML mirrors synthetic-egm-pipeline's ``label_policy`` pattern:
     a ``type`` discriminator plus per-strategy params. Two strategies
     ship out of the box; new ones land as one file in
-    ``myocard_egm_data.splits.strategies`` and one entry in
+    ``myocard_egm_classifier.data.splits.strategies`` and one entry in
     :func:`_build_split_strategy_block` here.
 
     Attributes
@@ -563,7 +562,7 @@ def to_train_runtime_config(cfg: TrainExperimentConfig, pos_weight: float | None
 
 
 def loader_kwargs_from_config(cfg: TrainExperimentConfig) -> dict[str, Any]:
-    """Keyword args for ``myocard_egm_data.datasets.build_dataloaders``.
+    """Keyword args for ``myocard_egm_classifier.data.datasets.build_dataloaders``.
 
     Mirrors the build_dataloaders signature exactly; this function exists
     so train_cmd doesn't have to know which TrainExperimentConfig fields

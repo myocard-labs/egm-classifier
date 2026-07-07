@@ -30,11 +30,11 @@ from typing import Any
 
 import numpy as np
 import torch
-from myocard_egm_data.datasets import LoaderBundle
 from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from myocard_egm_classifier.data.datasets import LoaderBundle
 from myocard_egm_classifier.inference_helpers import collect_logits
 from myocard_egm_classifier.metrics import binary_metrics
 from myocard_egm_classifier.training.reporting import EpochRecord, make_epoch_record

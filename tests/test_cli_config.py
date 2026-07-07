@@ -21,7 +21,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from myocard_egm_data.splits import AnyPositiveStrategy, BinnedDensityStrategy
 
 from myocard_egm_classifier.cli._common import ConfigError, load_yaml
 from myocard_egm_classifier.cli._train_config import (
@@ -40,6 +39,7 @@ from myocard_egm_classifier.constants import (
     DEFAULT_WIDTH_MULTIPLIER,
     DEFAULT_ZNORM_EPS,
 )
+from myocard_egm_classifier.data.splits import AnyPositiveStrategy, BinnedDensityStrategy
 
 
 def _write_yaml(tmp_path: Path, body: str, name: str = "cfg.yaml") -> Path:
@@ -170,7 +170,7 @@ def test_loader_kwargs_round_trips_into_build_dataloaders_shape(tmp_path: Path) 
     """
     from inspect import signature
 
-    from myocard_egm_data.datasets import build_dataloaders
+    from myocard_egm_classifier.data.datasets import build_dataloaders
 
     cfg_path = _write_yaml(tmp_path, "data:\n  bank: ./x.h5\n")
     cfg = build_train_config(load_yaml(cfg_path))
