@@ -20,7 +20,7 @@ Flow:
 4. Populate ``ClassifierPrediction`` on every trace, stamp the
    producing model's id + the predictions bank's own stable
    cross-artifact id (``lpred_`` labeled / ``upred_`` unlabeled), and
-   write a sibling ``<stem>_pred.cbank.h5`` next to the input
+   write a sibling ``<stem>_pred.classifier.h5`` next to the input
    (configurable via ``output.predictions_bank``).
 5. For a labeled bank, compute the standard binary-metric bundle from
    the inference logits + bank labels and print it to stdout. For an
@@ -157,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # Resolve the predictions-bank output path: explicit config wins; otherwise
-    # derive the sibling _pred.cbank.h5 next to the input.
+    # derive the sibling _pred.classifier.h5 next to the input.
     assert cfg.data.bank is not None  # build_eval_config rejects None
     predictions_bank_path = cfg.output.predictions_bank or default_predictions_bank_path(
         cfg.data.bank

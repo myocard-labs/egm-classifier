@@ -102,7 +102,9 @@ def _write_yaml(tmp_path: Path, body: str, name: str = "export.yaml") -> Path:
     return p
 
 
-def _write_input_bank(tmp_path: Path, bank: ClassifierBank, name: str = "calib.cbank.h5") -> Path:
+def _write_input_bank(
+    tmp_path: Path, bank: ClassifierBank, name: str = "calib.classifier.h5"
+) -> Path:
     """Write the fixture bank to a temp file under the canonical extension."""
     input_path = tmp_path / name
     write_classifier_bank(bank, input_path)

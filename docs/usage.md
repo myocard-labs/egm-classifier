@@ -95,13 +95,13 @@ egm-class-eval CONFIG.yaml [--checkpoint PATH] [--bank PATH]
 |---|---|---|
 | `--checkpoint PATH` | `checkpoint` | Run the same eval YAML against a different `best.pt`. |
 | `--bank PATH` | `data.bank` | Evaluate against a different bank. |
-| `--predictions-bank PATH` | `output.predictions_bank` | Direct the output to a custom location; default is sibling `<stem>_pred.cbank.h5`. |
+| `--predictions-bank PATH` | `output.predictions_bank` | Direct the output to a custom location; default is sibling `<stem>_pred.classifier.h5`. |
 | `--threshold F` | (the decision threshold for `label_pred`) | Sweep thresholds without re-eval; the predictions bank carries raw logits, so any threshold can be re-applied downstream. |
 | `--device cuda\|cpu` | (no YAML equivalent) | Force a device. |
 
 **Outputs**:
 
-- `<input_stem>_pred.cbank.h5` — sibling `ClassifierBank` with
+- `<input_stem>_pred.classifier.h5` — sibling `ClassifierBank` with
   `ClassifierPrediction` populated on every trace (`label_pred`,
   `label_prob`, raw `pred_logits`). It carries its own stable id —
   `lpred_<run_name>_<date>` (labeled input) or
@@ -173,7 +173,7 @@ loud `ConfigError` at load time — typos don't get silently dropped.
 ```yaml
 # REQUIRED — path to a ClassifierBank HDF5 (label_truth on every trace).
 data:
-  bank: ../banks/noise_mixed_v1.cbank.h5
+  bank: ../banks/noise_mixed_v1.classifier.h5
   batch_size: 64                  # default
   num_workers: 0                  # default
   znorm: true                     # per-trace z-score (v1 default)
@@ -228,7 +228,7 @@ checkpoint: ../checkpoints/v1_baseline/best.pt
 
 # REQUIRED — labeled ClassifierBank to evaluate against.
 data:
-  bank: ../banks/synthetic_test.cbank.h5
+  bank: ../banks/synthetic_test.classifier.h5
   batch_size: 64                  # default
   num_workers: 0                  # default
   znorm: true                     # default; must match training
@@ -237,9 +237,9 @@ data:
 
 # OPTIONAL — where the predictions bank lands.
 output:
-  # Default is sibling <input_stem>_pred.cbank.h5; override here for a
+  # Default is sibling <input_stem>_pred.classifier.h5; override here for a
   # custom destination.
-  predictions_bank: ../predictions/v1_baseline_pred.cbank.h5
+  predictions_bank: ../predictions/v1_baseline_pred.classifier.h5
   # OPTIONAL — stable id for the predictions bank. Omit to derive it
   # automatically: lpred_<run_name>_<date> (labeled input) or
   # upred_<run_name>_<date> (unlabeled input). Set to override verbatim.
@@ -262,7 +262,7 @@ checkpoint: ../checkpoints/v1_baseline/best.pt
 # OPTIONAL — labeled bank for the temperature fit. Omit (or set
 # `bank: null`) to skip calibration and ship with T = 1.0.
 calibration:
-  bank: ../banks/calibration_v1.cbank.h5
+  bank: ../banks/calibration_v1.classifier.h5
   batch_size: 64                  # default
   num_workers: 0                  # default
   pin_memory: false               # default
@@ -307,7 +307,7 @@ index answer "what produced what" without parsing file contents:
 |---|---|---|---|
 | Training run (`run.json`) | `run_id` | `run_<run_name>_<date>` | `run_` |
 | Exported model (`model_metadata.json`) | `model_id` | `model_<run_name>_<date>` | `model_` |
-| Predictions bank (`_pred.cbank.h5`) | `id` | `lpred_<run_name>_<date>` (labeled) / `upred_<run_name>_<date>` (unlabeled) | `lpred_` / `upred_` |
+| Predictions bank (`_pred.classifier.h5`) | `id` | `lpred_<run_name>_<date>` (labeled) / `upred_<run_name>_<date>` (unlabeled) | `lpred_` / `upred_` |
 
 `run_name` is the single human-chosen descriptor: set it once in the
 train YAML (`output.run_name`) and it threads through the run, the model,
@@ -389,7 +389,7 @@ since the last export):
 
 ```bash
 egm-class-export examples/v1_export.yaml \
-  --calibration-bank ../banks/calibration_v2.cbank.h5 \
+  --calibration-bank ../banks/calibration_v2.classifier.h5 \
   --output-name best_calv2
 ```
 
@@ -443,7 +443,7 @@ import numpy as np
 from myocard_egm_data.banks import load_classifier_bank
 from myocard_egm_classifier.metrics import binary_metrics
 
-bank = load_classifier_bank("../predictions/v1_baseline_pred.cbank.h5")
+bank = load_classifier_bank("../predictions/v1_baseline_pred.classifier.h5")
 
 # Raw logits are stamped on every trace under prediction.pred_logits.
 logits = np.array([t.prediction.pred_logits[1] for t in bank.traces])

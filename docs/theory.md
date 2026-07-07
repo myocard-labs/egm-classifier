@@ -987,7 +987,7 @@ wrong, or the model is poorly calibrated and the natural threshold
 isn't 0.5.
 
 **First fix:** sweep `τ` over the validation predictions bank
-(`<stem>_pred.cbank.h5`) and pick the F1- or precision-recall-
+(`<stem>_pred.classifier.h5`) and pick the F1- or precision-recall-
 maximizing threshold for your operational cost function (§5.2).
 
 **Less likely:** the calibration shifted the optimal threshold off
@@ -1010,7 +1010,7 @@ ECE measured against a fresh labeled set is > 0.10.
   calibration bank:
   ```
   egm-class-export examples/v1_export.yaml \
-    --calibration-bank ../banks/calibration_v2.cbank.h5 \
+    --calibration-bank ../banks/calibration_v2.classifier.h5 \
     --output-name best_calv2
   ```
   See `docs/usage.md` §"Re-fit calibration without re-training."

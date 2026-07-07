@@ -133,7 +133,7 @@ def test_train_cmd_stamps_cross_artifact_ids(
     # Give the input bank a stable id so trained_on_bank_id has something to
     # reference (a freshly-converted bank loads with id=None).
     bank_with_id = dataclasses.replace(tiny_classifier_bank, id="tbank_train_smoke_2026-06-27")
-    bank_path = tmp_path / "train.cbank.h5"
+    bank_path = tmp_path / "train.classifier.h5"
     write_classifier_bank(bank_with_id, bank_path)
 
     ckpt_dir = tmp_path / "ckpt"

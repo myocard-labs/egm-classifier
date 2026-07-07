@@ -88,7 +88,7 @@ class EvalOutputCLIConfig:
     ``predictions_bank`` is the sibling ClassifierBank that the CLI
     writes with ``ClassifierPrediction`` populated on every trace.
     When ``None``, the CLI derives a sibling path from the input
-    bank: ``<input_stem>_pred.cbank.h5``.
+    bank: ``<input_stem>_pred.classifier.h5``.
 
     ``bank_id`` optionally overrides the predictions bank's stable
     cross-artifact id. When ``None``, the CLI derives

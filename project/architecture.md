@@ -47,7 +47,7 @@ The contract surface is narrow on both sides:
   to a `myocard-egm-contracts` schema version. Producers
   (iafdb-pipeline, synthetic-egm-pipeline) write these.
 - **Outputs:** a trained `best.pt` + `run.json` + `metrics.csv` for
-  training audit; a `<stem>_pred.cbank.h5` sibling for eval-time
+  training audit; a `<stem>_pred.classifier.h5` sibling for eval-time
   predictions; a `<name>.onnx` + `<name>.model_metadata.json` pair
   for deployment.
 
@@ -226,7 +226,7 @@ and TraceTransform is wired into `EGMTraceDataset`'s `__getitem__`.
 
 - **Input:** one `ClassifierBank` (labeled or unlabeled) + one
   checkpoint.
-- **Output:** a sibling `<stem>_pred.cbank.h5` with
+- **Output:** a sibling `<stem>_pred.classifier.h5` with
   `ClassifierPrediction` stamped on every trace and its own stable
   `lpred_`/`upred_` id, plus — for a labeled bank — a metric bundle
   printed to stdout. **No metrics file written.**
@@ -361,7 +361,7 @@ explicit.
 | `best.pt` | training loop, when val metric improves | torch dict: `model_state_dict`, `model_meta`, `train_config`, `val_loss`, `val_metrics`, `training_provenance` | configured `output.checkpoint_dir` |
 | `run.json` | training loop, at end-of-run | `myocard-egm-contracts.training_run_record` schema 1.1 (carries `run_id` + `produced_model_id` + `trained_on_bank_id`) | same dir as `best.pt` |
 | `metrics.csv` | training loop, at end-of-run | `myocard-egm-contracts.training_metrics` (one row per epoch) | same dir as `best.pt` |
-| `<stem>_pred.cbank.h5` | eval CLI | egm-data `ClassifierBank` (an egm-data format, *not* a contracts schema) with `ClassifierPrediction` populated + a stable `lpred_`/`upred_` `id` | sibling to input bank |
+| `<stem>_pred.classifier.h5` | eval CLI | egm-data `ClassifierBank` (an egm-data format, *not* a contracts schema) with `ClassifierPrediction` populated + a stable `lpred_`/`upred_` `id` | sibling to input bank |
 | `<name>.onnx` | export CLI | ONNX graph (calibrated logits) | configured `output.dir` |
 | `<name>.model_metadata.json` | export CLI | `myocard-egm-contracts.egm_class_model_metadata` schema 1.2 (adds top-level `model_id`) | sibling to `.onnx` |
 

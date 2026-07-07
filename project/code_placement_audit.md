@@ -80,17 +80,22 @@ the code it describes.
 
 No other single-consumer misplacements surfaced in the sweep.
 
-## 3. Open follow-up — bank file-extension convention
+## 3. Bank file-extension convention — standardized on `.classifier.h5`
 
-Noted during the audit, not resolved here: the on-disk extension for a
-classifier-shaped bank is **inconsistent** across the stack. egm-classifier
-writes predictions as `_pred.cbank.h5`, while egm-studio demo banks and
-producer output use `*.classifier.h5` — two names for the same
-`ClassifierBank` shape. The convention is implicit (it lives in example
-configs and reader/writer call sites, not documented or enforced anywhere).
-Worth standardizing on one extension and recording it in egm-data (the I/O
-owner) or egm-contracts alongside the schemas; optionally have the writers
-stamp/expect it. Filed as a follow-up; no code change in this audit.
+Surfaced in the audit and resolved 2026-07-07: the on-disk extension for a
+classifier-shaped bank was **inconsistent** across the stack. egm-classifier
+wrote predictions as `_pred.cbank.h5`, while egm-studio demo banks and the
+producers (iafdb-pipeline, synthetic-egm-pipeline) write `*.classifier.h5` —
+two names for the same `ClassifierBank` shape. **Standardized on
+`.classifier.h5`** (the producers' actual output + the ecosystem majority):
+egm-classifier's `default_predictions_bank_path` now emits
+`<stem>_pred.classifier.h5`, and the docs / examples / tests across every
+repo were swept to match.
+
+The convention is still implicit — it lives in reader/writer call sites, not
+documented or enforced in one place. Recording it in egm-data (the I/O owner)
+or egm-contracts alongside the schemas, and optionally having the writers
+stamp/expect it, remains a nice-to-have follow-up.
 
 ## References
 

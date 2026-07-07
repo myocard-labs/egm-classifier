@@ -3,7 +3,7 @@
 PR B ships only the inference + prediction-stamping path. The CLI
 (``egm-class-eval`` in :mod:`myocard_egm_classifier.cli.eval_cmd`)
 loads a trained checkpoint, runs inference over every trace of a
-ClassifierBank, writes a sibling ``<stem>_pred.cbank.h5`` with
+ClassifierBank, writes a sibling ``<stem>_pred.classifier.h5`` with
 :class:`ClassifierPrediction` populated on each trace, and (for a
 labeled bank) prints scalar metrics to stdout. No calibration, no
 metrics file, no new schemas — see ``project/architecture.md`` for the
@@ -20,7 +20,7 @@ Module layout
 - :mod:`.predictions` — :func:`populate_predictions` (stamps
   :class:`ClassifierPrediction` onto every trace from the model's
   logits) and :func:`default_predictions_bank_path` (derives the
-  sibling ``_pred.cbank.h5`` output path).
+  sibling ``_pred.classifier.h5`` output path).
 
 The CLI module (``cli/eval_cmd.py``) is intentionally thin: argparse,
 config loading, and the top-level orchestration that wires these

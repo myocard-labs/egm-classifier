@@ -7,7 +7,7 @@ Two pieces live here:
   :class:`ClassifierPrediction` derived from the per-trace logits
   produced by :func:`myocard_egm_classifier.inference_helpers.collect_logits`.
 - :func:`default_predictions_bank_path` derives the sibling
-  ``<stem>_pred.cbank.h5`` path next to an input bank.
+  ``<stem>_pred.classifier.h5`` path next to an input bank.
 
 Both deal with the output-bank concept, so they cluster here instead
 of being split between ``cli/`` and ``eval/``. The actual on-disk
@@ -90,17 +90,17 @@ def stamp_predictions_model_id(bank: ClassifierBank, model_id: str) -> None:
 
 
 def default_predictions_bank_path(input_bank: Path) -> Path:
-    """Derive the sibling ``_pred.cbank.h5`` path from the input bank.
+    """Derive the sibling ``_pred.classifier.h5`` path from the input bank.
 
-    Convention: ``<stem>_pred.cbank.h5`` next to the input. Strips the
-    ``.cbank.h5`` suffix if present (else ``.h5``, else the bare stem)
-    before appending ``_pred.cbank.h5``.
+    Convention: ``<stem>_pred.classifier.h5`` next to the input. Strips the
+    ``.classifier.h5`` suffix if present (else ``.h5``, else the bare stem)
+    before appending ``_pred.classifier.h5``.
     """
     name = input_bank.name
-    if name.endswith(".cbank.h5"):
-        stem = name[: -len(".cbank.h5")]
+    if name.endswith(".classifier.h5"):
+        stem = name[: -len(".classifier.h5")]
     elif name.endswith(".h5"):
         stem = name[: -len(".h5")]
     else:
         stem = input_bank.stem
-    return input_bank.with_name(f"{stem}_pred.cbank.h5")
+    return input_bank.with_name(f"{stem}_pred.classifier.h5")

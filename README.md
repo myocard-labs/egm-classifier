@@ -49,7 +49,7 @@ End-to-end: train a model on a `ClassifierBank`, evaluate it on a held-out bank,
 
 ```bash
 egm-class-train  examples/v1_baseline.yaml    # → checkpoints/v1_baseline/{best.pt, run.json, metrics.csv}
-egm-class-eval   examples/v1_eval.yaml        # → predictions/v1_baseline_pred.cbank.h5 + stdout metrics
+egm-class-eval   examples/v1_eval.yaml        # → predictions/v1_baseline_pred.classifier.h5 + stdout metrics
 egm-class-export examples/v1_export.yaml      # → exports/v1_baseline/{best.onnx, best.model_metadata.json}
 ```
 
@@ -58,7 +58,7 @@ Three console scripts are installed:
 | Command | Purpose |
 |---|---|
 | `egm-class-train` | Train a 1D MobileViT against a labeled `ClassifierBank` with patient-aware splits and AUROC-selected best-checkpoint saving. |
-| `egm-class-eval` | Run sequential inference over a labeled or unlabeled bank, write a sibling `<stem>_pred.cbank.h5` (a stable `lpred_`/`upred_` id) with per-trace logits + probabilities + predictions; print the scalar metric bundle to stdout for labeled input. |
+| `egm-class-eval` | Run sequential inference over a labeled or unlabeled bank, write a sibling `<stem>_pred.classifier.h5` (a stable `lpred_`/`upred_` id) with per-trace logits + probabilities + predictions; print the scalar metric bundle to stdout for labeled input. |
 | `egm-class-export` | Fit a temperature scalar against a labeled calibration bank (optional), export the calibrated model to ONNX, write the typed metadata sidecar the C++ runtime consumes. |
 
 All three are YAML-config-driven; argparse flags act as per-invocation overrides on top of the YAML. Full CLI reference and end-to-end walkthroughs in [`docs/usage.md`](docs/usage.md). Three pre-written example configs covering the v1 baseline pipeline live under [`examples/`](examples/).

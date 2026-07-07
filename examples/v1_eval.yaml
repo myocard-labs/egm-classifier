@@ -28,8 +28,8 @@ threshold: 0.5
 
 output:
   # Sibling predictions bank. Omit to derive automatically:
-  # <input_stem>_pred.cbank.h5 next to the input.
-  predictions_bank: ../predictions/v1_baseline_test_pred.cbank.h5
+  # <input_stem>_pred.classifier.h5 next to the input.
+  predictions_bank: ../predictions/v1_baseline_test_pred.classifier.h5
   # Stable id for the predictions bank. Omit to derive automatically from
   # the producing run's name + labeled-ness: lpred_<run_name>_<date>
   # (labeled) or upred_<run_name>_<date> (unlabeled). Set explicitly to

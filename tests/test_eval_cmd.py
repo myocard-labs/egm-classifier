@@ -7,7 +7,7 @@ eval CLI's ``main`` against the synthetic ClassifierBank fixture from
 random — we don't care about metric values, we care that:
 
 1. The CLI returns 0 (no error path).
-2. The sibling ``_pred.cbank.h5`` is created at the expected location.
+2. The sibling ``_pred.classifier.h5`` is created at the expected location.
 3. Every trace in the loaded predictions bank carries a populated
    :class:`ClassifierPrediction` with the right field shapes.
 4. The default sibling-path derivation strips the right suffixes
@@ -97,7 +97,7 @@ def _write_yaml(tmp_path: Path, body: str, name: str = "eval.yaml") -> Path:
 
 def _write_input_bank(tmp_path: Path, bank: ClassifierBank) -> Path:
     """Write the fixture bank to a temp file under the canonical extension."""
-    input_path = tmp_path / "tiny_test.cbank.h5"
+    input_path = tmp_path / "tiny_test.classifier.h5"
     write_classifier_bank(bank, input_path)
     return input_path
 
@@ -149,7 +149,7 @@ def test_eval_cmd_honors_explicit_predictions_bank_override(
     input_length = 64
     bank_path = _write_input_bank(tmp_path, tiny_classifier_bank)
     ckpt_path = _make_checkpoint(tmp_path, input_length=input_length)
-    custom_out = tmp_path / "custom_predictions.cbank.h5"
+    custom_out = tmp_path / "custom_predictions.classifier.h5"
 
     cfg_path = _write_yaml(
         tmp_path,
@@ -192,7 +192,7 @@ data:
     )
 
     # High threshold => almost every prediction is class 0.
-    high_out = tmp_path / "high.cbank.h5"
+    high_out = tmp_path / "high.classifier.h5"
     rc = eval_main(
         [
             str(cfg_path),
@@ -211,7 +211,7 @@ data:
     )
 
     # Low threshold => almost every prediction is class 1.
-    low_out = tmp_path / "low.cbank.h5"
+    low_out = tmp_path / "low.classifier.h5"
     rc = eval_main(
         [
             str(cfg_path),
@@ -235,10 +235,12 @@ data:
 
 def test_default_predictions_bank_path_strips_suffixes() -> None:
     """The sibling-path derivation handles the three filename conventions
-    cleanly: .cbank.h5, .h5, and bare-stem."""
-    assert default_predictions_bank_path(Path("/x/y.cbank.h5")) == Path("/x/y_pred.cbank.h5")
-    assert default_predictions_bank_path(Path("/x/y.h5")) == Path("/x/y_pred.cbank.h5")
-    assert default_predictions_bank_path(Path("/x/y")) == Path("/x/y_pred.cbank.h5")
+    cleanly: .classifier.h5, .h5, and bare-stem."""
+    assert default_predictions_bank_path(Path("/x/y.classifier.h5")) == Path(
+        "/x/y_pred.classifier.h5"
+    )
+    assert default_predictions_bank_path(Path("/x/y.h5")) == Path("/x/y_pred.classifier.h5")
+    assert default_predictions_bank_path(Path("/x/y")) == Path("/x/y_pred.classifier.h5")
 
 
 def test_eval_cmd_rejects_missing_bank_with_clear_error(
@@ -251,7 +253,7 @@ def test_eval_cmd_rejects_missing_bank_with_clear_error(
         f"""\
 checkpoint: {ckpt_path}
 data:
-  bank: {tmp_path / "does_not_exist.cbank.h5"}
+  bank: {tmp_path / "does_not_exist.classifier.h5"}
 """,
     )
 
@@ -390,7 +392,7 @@ def test_eval_config_parses_output_bank_id(tmp_path: Path) -> None:
     cfg_path = _write_yaml(
         tmp_path,
         "checkpoint: ./best.pt\n"
-        "data:\n  bank: ./x.cbank.h5\n"
+        "data:\n  bank: ./x.classifier.h5\n"
         "output:\n  bank_id: lpred_x_2026-06-27\n",
     )
     cfg = build_eval_config(load_yaml(cfg_path))

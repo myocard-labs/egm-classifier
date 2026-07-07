@@ -18,7 +18,7 @@ Scope (recap; see `architecture.md` for the design rationale):
   egm-data records layer.
 - **`egm-class-eval`** CLI: load a checkpoint, run sequential
   inference over a labeled bank, populate `ClassifierPrediction` on
-  every trace, write a sibling `<stem>_pred.cbank.h5`, print the
+  every trace, write a sibling `<stem>_pred.classifier.h5`, print the
   scalar metric bundle to stdout.
 - **`egm-class-export`** CLI: optional temperature-scaling fit
   against a labeled bank, ONNX export with the fitted `T` baked into
