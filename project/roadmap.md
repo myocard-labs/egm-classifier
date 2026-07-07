@@ -159,24 +159,44 @@ check to config-load time (fail-fast). Shared cleanup with the producer
 pipelines (synthetic-egm-pipeline + iafdb-pipeline); pairs with the egm-contracts
 "optional date suffix" relaxation.
 
-### Cross-project code placement audit — Refactor Step 8 (cleanup)
+### Cross-project code placement audit — Refactor Step 8 (cleanup) — done
 
-> → Tracked at `intracardiac-platform/project/refactor_checklist.md` Phase 8 (cleanup + verification). The audit is the comprehensive end-of-refactor sweep — by Phase 8 all repos exist and have settled, so it can resolve every misplaced piece of code at once rather than piecemeal during each scaffolding pass. TraceTransform is one known candidate; others will surface as the per-repo roadmap reviews proceed. Also tracked as task #287.
+> → Tracked at `intracardiac-platform/project/refactor_checklist.md` Step 8.
+> Audit record: [`project/code_placement_audit.md`](code_placement_audit.md).
+> Was task #287.
 
-Some library code currently lives in the wrong package. Known
-candidate:
+The end-of-refactor sweep. Outcome: the **torch-based training-data layer
+moved into egm-classifier** as `myocard_egm_classifier.data` (`datasets/` +
+`splits/` + `augmentation/`), since egm-classifier is its sole consumer.
+egm-data is now a **pure I/O** library (no torch); it was bumped to
+**v0.5.0** and dropped its `[torch]` extra. egm-classifier re-pins
+`myocard-egm-data[torch] v0.4.x` to `myocard-egm-data v0.5.0` (no extra).
 
-- **`TraceTransform`** lives in `myocard-egm-data` but is only
-  consumed by `myocard-egm-classifier` (training + eval data
-  loaders, plus the export-side calibration loop). If no other
-  consumer materializes by audit time, move it to egm-classifier.
+The sweep also checked `myocard-egm-signal` and `myocard-egm-contracts` for
+single-consumer code; see the audit doc for what stayed put and why.
 
-The audit should sweep every shared library
-(`myocard-egm-data`, `myocard-egm-signal`, `myocard-egm-contracts`)
-for code that's only consumed by one downstream component.
-Deliverable: a brief audit doc with each questionable item, its
-current home, its consumers, a recommendation (move / keep /
-split), then a follow-up commit per move.
+### Training-data layer follow-ups (absorbed from egm-data)
+
+Future work that came over with the data layer (previously tracked in
+egm-data's roadmap):
+
+- **Variable-length / longer-`T` `EGMTraceDataset` — Phase 4.** Multi-beat
+  windows want longer (and possibly variable-length) traces; settle
+  fixed-length-multi-beat vs variable-length + a custom `collate_fn`. Pairs
+  with the `TraceTransform` time-shift fix (producer emits `L > T`, dataset
+  takes a random length-`T` crop each `__getitem__` — see
+  [`project/trace_transform_review.md`](trace_transform_review.md)).
+- **Splitting-strategy choices — component-internal.** The
+  `patient_aware_split` strategy Protocol ships `AnyPositive` +
+  `BinnedDensity`; the trade-off space (stratification target, bin-count
+  default, small-patient-count K-fold fallback) isn't fully mapped.
+- **Streaming `EGMTraceDataset` — open.** Today it loads the whole HDF5
+  signal array into RAM at construction; a chunked / mmap loader may be
+  needed as banks grow (Phase 1.5 pushes synthetic to 300–500 sims; Phase 7
+  multi-beat + 3D geometry is larger still).
+
+The `normalize` mode (`zscore` / `zero2one` / `none`) and training-time
+additive-noise augmentation already have their own Phase 1.5 entries above.
 
 ### Migrate `torch.onnx.export` to the dynamo path — component-internal
 
