@@ -137,6 +137,28 @@ match what the model was trained against. To fix:
 Deferred until the full polyrepo refactor is settled so the
 training-side change can land cleanly.
 
+### Progress bar for `egm-class-eval` execution — component-internal
+
+> → Component-internal UX; do anytime, no project-phase home. Low priority.
+
+`egm-class-eval` runs the bank through the model sequentially with no
+feedback, so a large bank (e.g. a full IAFDB inference bank) looks hung on an
+underpowered machine. Wrap the eval prediction loop in a progress bar
+(`tqdm`, with a `--no-progress` escape hatch + graceful degradation when
+`tqdm` is absent, matching the `iafdb-export-bank` producer pattern), driven
+by the trace/batch count. Training already has per-epoch feedback; this brings
+the eval CLI to parity. Surfaced while evaluating an IAFDB bank on a laptop.
+
+### Validate config `bank_id` override at config-load — Refactor Step 8 (cleanup)
+
+> → Surfaced 2026-06-30 from synthetic-egm-pipeline bank-id testing. Cross-tracked in `intracardiac-platform/project/refactor_checklist.md` Step 8.
+
+The predictions-bank `bank_id` override is validated for id-validity at the
+**write** step, so a bad hand-set id only fails after train/eval runs. Move the
+check to config-load time (fail-fast). Shared cleanup with the producer
+pipelines (synthetic-egm-pipeline + iafdb-pipeline); pairs with the egm-contracts
+"optional date suffix" relaxation.
+
 ### Cross-project code placement audit — Refactor Step 8 (cleanup)
 
 > → Tracked at `intracardiac-platform/project/refactor_checklist.md` Phase 8 (cleanup + verification). The audit is the comprehensive end-of-refactor sweep — by Phase 8 all repos exist and have settled, so it can resolve every misplaced piece of code at once rather than piecemeal during each scaffolding pass. TraceTransform is one known candidate; others will surface as the per-repo roadmap reviews proceed. Also tracked as task #287.
