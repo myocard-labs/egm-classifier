@@ -383,17 +383,27 @@ output:
     assert "not a valid stable artifact id" in err
 
 
-def test_eval_config_parses_output_bank_id(tmp_path: Path) -> None:
-    """``build_eval_config`` reads ``output.bank_id`` verbatim (the format is
-    validated at use time, not config-build time)."""
-    from myocard_egm_classifier.cli._common import load_yaml
+def test_eval_config_validates_output_bank_id(tmp_path: Path) -> None:
+    """``build_eval_config`` validates ``output.bank_id`` at config-build time
+    (S8-3 fail-fast): a well-formed id passes through; a malformed one raises
+    ConfigError before any eval run."""
+    from myocard_egm_classifier.cli._common import ConfigError, load_yaml
     from myocard_egm_classifier.cli._eval_config import build_eval_config
 
-    cfg_path = _write_yaml(
+    good_path = _write_yaml(
         tmp_path,
         "checkpoint: ./best.pt\n"
         "data:\n  bank: ./x.classifier.h5\n"
         "output:\n  bank_id: lpred_x_2026-06-27\n",
     )
-    cfg = build_eval_config(load_yaml(cfg_path))
+    cfg = build_eval_config(load_yaml(good_path))
     assert cfg.output.bank_id == "lpred_x_2026-06-27"
+
+    bad_path = _write_yaml(
+        tmp_path,
+        "checkpoint: ./best.pt\n"
+        "data:\n  bank: ./x.classifier.h5\n"
+        'output:\n  bank_id: "Not A Valid Id"\n',
+    )
+    with pytest.raises(ConfigError, match=r"output.bank_id"):
+        build_eval_config(load_yaml(bad_path))

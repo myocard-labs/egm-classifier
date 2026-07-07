@@ -86,7 +86,7 @@ from myocard_egm_classifier.eval import (
     populate_predictions,
     stamp_predictions_model_id,
 )
-from myocard_egm_classifier.ids import derive_predictions_bank_id, validate_artifact_id
+from myocard_egm_classifier.ids import derive_predictions_bank_id
 from myocard_egm_classifier.inference_helpers import collect_logits
 from myocard_egm_classifier.metrics import binary_metrics
 
@@ -261,11 +261,8 @@ def main(argv: list[str] | None = None) -> int:
         stamp_predictions_model_id(bank, model_id)
 
     if cfg.output.bank_id is not None:
-        try:
-            bank.id = validate_artifact_id(cfg.output.bank_id)
-        except ValueError as exc:
-            print(f"ERROR: {exc}", file=sys.stderr)
-            return 2
+        # Already validated at config-load (build_eval_config); use as-is.
+        bank.id = cfg.output.bank_id
     else:
         bank.id = derive_predictions_bank_id(labeled=labeled, run_name=run_name)
     print(f"Predictions bank id: {bank.id}")

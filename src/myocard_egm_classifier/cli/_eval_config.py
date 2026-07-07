@@ -47,6 +47,7 @@ from myocard_egm_classifier.constants import (
     DEFAULT_ZNORM,
     DEFAULT_ZNORM_EPS,
 )
+from myocard_egm_classifier.ids import validate_artifact_id
 
 DEFAULT_EVAL_THRESHOLD = 0.5
 """Default decision threshold for the eval CLI's ``label_pred``.
@@ -190,7 +191,14 @@ def _build_eval_output_block(block: dict[str, Any], config_dir: Path) -> EvalOut
     raw = block.get("predictions_bank")
     predictions_bank = _resolve_path(str(raw) if raw is not None else None, config_dir)
     bank_id_raw = block.get("bank_id")
-    bank_id = str(bank_id_raw) if bank_id_raw is not None else None
+    if bank_id_raw is None:
+        bank_id = None
+    else:
+        # Validated at load so a malformed override fails before the eval run.
+        try:
+            bank_id = validate_artifact_id(str(bank_id_raw))
+        except ValueError as exc:
+            raise ConfigError(f"output.bank_id: {exc}") from exc
     return EvalOutputCLIConfig(predictions_bank=predictions_bank, bank_id=bank_id)
 
 
