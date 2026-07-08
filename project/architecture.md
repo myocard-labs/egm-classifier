@@ -459,8 +459,8 @@ actually run their parity check end-to-end.
 Three sibling pins:
 
 ```
-myocard-egm-contracts @ git+...@v0.5.1  # schemas (incl. ArtifactId)
-myocard-egm-data[torch] @ git+...@v0.4.0  # bank I/O + datasets + records
+myocard-egm-contracts @ git+...@v0.5.3  # schemas (incl. ArtifactId)
+myocard-egm-data       @ git+...@v0.5.0  # bank I/O + records
 myocard-egm-signal     @ git+...@v0.2.0  # temperature_scaling
 ```
 

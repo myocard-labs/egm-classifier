@@ -29,10 +29,11 @@ extra to install.
 
 Three sibling packages get pulled in automatically:
 
-- `myocard-egm-contracts==0.5.1` — JSON Schemas + Pydantic models
+- `myocard-egm-contracts==0.5.3` — JSON Schemas + Pydantic models
   (the stable cross-artifact `ArtifactId` pattern lives here).
-- `myocard-egm-data[torch]==0.4.0` — `ClassifierBank` I/O,
-  `EGMTraceDataset`, patient-aware splits, `TraceTransform`.
+- `myocard-egm-data==0.5.0` — `ClassifierBank` I/O (bank / record /
+  phase readers + writers). The `EGMTraceDataset`, patient-aware split,
+  and `TraceTransform` now live in this package (`.data`), not egm-data.
 - `myocard-egm-signal==0.2.0` — temperature-scaling primitive used
   by the export CLI's calibration step.
 

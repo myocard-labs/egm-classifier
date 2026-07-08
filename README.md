@@ -37,7 +37,7 @@ pip install -e ".[dev,onnx]"
 pre-commit install
 ```
 
-The runtime deps (`myocard-egm-contracts`, `myocard-egm-data[torch]`, `myocard-egm-signal`, `pydantic`, `torch`, `torchmetrics`, `numpy`, `tqdm`, `pyyaml`) come in transitively. The three myocard siblings are pinned to git tags during pre-1.0; drop the direct references once they publish to PyPI.
+The runtime deps (`myocard-egm-contracts`, `myocard-egm-data`, `myocard-egm-signal`, `pydantic`, `torch`, `torchmetrics`, `numpy`, `tqdm`, `pyyaml`) come in transitively. The three myocard siblings are pinned to git tags during pre-1.0; drop the direct references once they publish to PyPI.
 
 The `[onnx]` extra is kept optional so training-only images (Docker, K8s) don't pull ~200 MB of deployment toolchain. The `egm-class-export` script is installed regardless; if you invoke it without the extra, it'll catch the import failure at runtime and point you at the right `pip install` line.
 
@@ -107,7 +107,7 @@ CI runs the same checks on Python 3.10, 3.11, and 3.12 — see `.github/workflow
 
 ## Project status
 
-This package is part of the in-progress [myocard-labs](https://github.com/myocard-labs) refactor. Pre-1.0 — expect breaking changes across minor versions until the schemas + CLI configs stabilise. The current release is `v0.4.0` (stable cross-artifact ids on every output, consuming the egm-contracts v0.5.x linkage schemas) and pins `myocard-egm-contracts v0.5.1`, `myocard-egm-data[torch] v0.4.0`, and `myocard-egm-signal v0.2.0`. See [`project/roadmap.md`](project/roadmap.md) for what's planned (zero2one normalization in train/eval, `run.json` as the export-config source, the activation-peak-anchoring investigation, dynamo ONNX exporter migration) and [`project/architecture.md`](project/architecture.md) for the design rationale.
+This package is part of the in-progress [myocard-labs](https://github.com/myocard-labs) refactor. Pre-1.0 — expect breaking changes across minor versions until the schemas + CLI configs stabilise. The current release is `v0.4.0` (stable cross-artifact ids on every output, consuming the egm-contracts v0.5.x linkage schemas) and (on `development`) pins `myocard-egm-contracts v0.5.3`, `myocard-egm-data v0.5.0`, and `myocard-egm-signal v0.2.0`. See [`project/roadmap.md`](project/roadmap.md) for what's planned (zero2one normalization in train/eval, `run.json` as the export-config source, the activation-peak-anchoring investigation, dynamo ONNX exporter migration) and [`project/architecture.md`](project/architecture.md) for the design rationale.
 
 ---
 
