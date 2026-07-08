@@ -11,9 +11,15 @@ around and addresses symptoms.
 This doc deliberately stays on the **math + operational** side.
 Plot-reading and visual-interpretation guidance (how to read a
 reliability diagram, axis conventions, common misreadings) lives
-in `egm-viewer/docs/usage.md` (still to be written; tracked
-alongside the rest of the post-refactor work) and will cross-link
-back here for derivations.
+in the egm-studio figure-reading guide (`egm-studio/docs/usage.md`),
+which cross-links back here for the derivations
+([[feedback-theory-docs-split]]).
+
+> **Rendering note.** Equations are written in LaTeX — `$$…$$` for
+> display, `$…$` for inline. GitHub and VS Code render these as
+> typeset math; in a plain-text viewer they show as LaTeX source.
+> Backticked names (`fs_hz`, `width_multiplier`) are code
+> identifiers, not math symbols.
 
 For the executable-side picture (CLIs, YAML schemas, walkthroughs)
 see `docs/usage.md`; for the deployment-side picture (ONNX graph
@@ -65,16 +71,19 @@ artifact lives) see `project/architecture.md`.
 
 ## Notation
 
-- `T` — number of samples per trace (default 512).
+- $T$ — number of samples per trace (default 512). (The same letter is the
+  temperature scalar in §4.2; context disambiguates, and that use is called out
+  where it appears.)
 - `fs_hz` — sample rate in hertz (default 1000.0).
-- `x ∈ ℝᵀ` — a single per-trace input.
-- `X ∈ ℝ^(B×C×T)` — a batch of `B` traces.
-- `C` — channel count; `C = 1` for the v1 bipolar single-channel head.
-- `z` — raw model output for one trace (a logit; scalar for the binary head).
-- `p = σ(z) = 1 / (1 + e⁻ᶻ)` — sigmoid-derived probability of the positive class.
-- `y ∈ {0, 1}` — ground-truth label. `0 = healthy`, `1 = fibrotic` (`HEALTHY_LABEL` / `FIBROTIC_LABEL`).
-- `τ` — decision threshold for the hard prediction `ŷ = 𝟙[p ≥ τ]`.
-- `T_scalar` (or just `T` in §4.2) — temperature-scaling scalar; context makes the meaning unambiguous.
+- $x \in \mathbb{R}^{T}$ — a single per-trace input (one bipolar channel, $T$ samples).
+- $X \in \mathbb{R}^{B \times C \times T}$ — a batch of $B$ traces.
+- $C$ — channel count; $C = 1$ for the v1 bipolar single-channel head.
+- $z$ — raw model output for one trace (a logit; scalar for the binary head).
+- $p = \sigma(z) = 1 / (1 + e^{-z})$ — sigmoid-derived probability of the positive class.
+- $y \in \{0, 1\}$ — ground-truth label ($0$ = healthy, $1$ = fibrotic; `HEALTHY_LABEL` / `FIBROTIC_LABEL`).
+- $\tau$ — decision threshold for the hard prediction $\hat{y} = \mathbf{1}[\,p \ge \tau\,]$.
+- $\mathbf{1}[\,\cdot\,]$ — the indicator: $1$ when the condition holds, else $0$.
+- $N$ — number of traces in the batch or evaluation set being summed over (index $i = 1 \dots N$).
 
 ---
 
@@ -152,8 +161,8 @@ deployment runtime:
 
 | Scheme | Per-trace transform | Removes | When to use |
 |---|---|---|---|
-| `zscore` (v1 default) | `(x - mean(x)) / std(x)` | per-trace amplitude **and** offset | When the model should rely on waveform morphology, not raw amplitude. |
-| `zero2one` | `(x - min(x)) / (max(x) - min(x))` | per-trace dynamic range, preserves shape | When the model should see normalized morphology but absolute peak structure matters. |
+| `zscore` (v1 default) | $(x - \operatorname{mean}(x)) / \operatorname{std}(x)$ | per-trace amplitude **and** offset | When the model should rely on waveform morphology, not raw amplitude. |
+| `zero2one` | $(x - \min(x)) / (\max(x) - \min(x))$ | per-trace dynamic range, preserves shape | When the model should see normalized morphology but absolute peak structure matters. |
 | `none` | identity | nothing | Rare. Only when the upstream hardware already calibrates traces into a fixed physical-unit range. |
 
 All three are computed **per trace** (along the time axis, with
@@ -494,24 +503,41 @@ copy-paste from a paper that trained on ImageNet.
 **Binary head (default).** `BCEWithLogitsLoss` — operates on raw
 logits and applies a numerically-stable sigmoid internally:
 
-```
-L_BCE = (1/N) · Σᵢ [ -yᵢ · log σ(zᵢ) - (1 - yᵢ) · log(1 - σ(zᵢ)) ]
-       = (1/N) · Σᵢ [ log(1 + exp(zᵢ)) - yᵢ · zᵢ ]
-```
+$$
+\mathcal{L}_{\mathrm{BCE}}
+= \frac{1}{N} \sum_{i=1}^{N} \Bigl[ -y_i \log \sigma(z_i) - (1 - y_i)\log\bigl(1 - \sigma(z_i)\bigr) \Bigr]
+= \frac{1}{N} \sum_{i=1}^{N} \Bigl[ \log\bigl(1 + e^{z_i}\bigr) - y_i z_i \Bigr]
+$$
 
-with `zᵢ` the per-trace logit and `yᵢ ∈ {0, 1}` the label. The
-second form is what's actually computed (via `logaddexp(0, z)`) so
-the loss stays finite for extreme logits.
+where:
+
+- $\mathcal{L}_{\mathrm{BCE}}$ — the mean binary cross-entropy over the batch.
+- $N$ — the number of traces in the batch.
+- $z_i$ — the per-trace logit (model output) for trace $i$.
+- $y_i \in \{0, 1\}$ — the label for trace $i$.
+- $\sigma(z_i) = 1/(1 + e^{-z_i})$ — the sigmoid, i.e. the predicted positive-class probability $p_i$.
+
+The second form is the one actually computed (via `logaddexp(0, z)`)
+so the loss stays finite for extreme logits.
+
+**Worked example.** Two traces with logits $z = [2.0,\, -1.0]$ and
+labels $y = [1,\, 0]$, using the second form $\log(1 + e^{z_i}) - y_i z_i$:
+trace 1 gives $\log(1 + e^{2}) - 2 = 2.127 - 2 = 0.127$; trace 2
+gives $\log(1 + e^{-1}) - 0 = 0.313$. The batch loss is
+$(0.127 + 0.313)/2 = 0.220$ — the confident-correct trace 1
+contributes little; the wrong-leaning trace 2 dominates.
 
 **Class imbalance handling.** If the bank is K-to-1 positive-vs-
 negative imbalanced, the BCE loss can be re-weighted to up-weight
 the positive class:
 
-```
-L_BCE_weighted = (1/N) · Σᵢ [ -w · yᵢ · log σ(zᵢ) - (1 - yᵢ) · log(1 - σ(zᵢ)) ]
-```
+$$
+\mathcal{L}_{\mathrm{BCE}}^{\mathrm{weighted}}
+= \frac{1}{N} \sum_{i=1}^{N} \Bigl[ -w\, y_i \log \sigma(z_i) - (1 - y_i)\log\bigl(1 - \sigma(z_i)\bigr) \Bigr]
+$$
 
-where `w = pos_weight`. Set `pos_weight = N_neg / N_pos` to make
+where $w$ is `pos_weight`, an up-weight applied to the positive-class
+term. Set `pos_weight` to $N_{\mathrm{neg}} / N_{\mathrm{pos}}$ to make
 the per-class gradient contributions roughly equal. The
 `train.pos_weight` YAML knob plumbs this through; leaving it
 `None` (the v1 default) treats the loss symmetrically and lets the
@@ -549,12 +575,22 @@ choice.
 
 The implemented schedule is:
 
-```
-lr(step) = base_lr · step / warmup_steps                       if step < warmup_steps
-        = min_lr + (base_lr - min_lr) · 0.5 · (1 + cos(π · progress))  otherwise
+$$
+\mathrm{lr}(s) =
+\begin{cases}
+\mathrm{lr}_{\mathrm{base}} \cdot \dfrac{s}{s_{\mathrm{warm}}} & s < s_{\mathrm{warm}} \\[1.4ex]
+\mathrm{lr}_{\min} + (\mathrm{lr}_{\mathrm{base}} - \mathrm{lr}_{\min}) \cdot \tfrac{1}{2}\bigl(1 + \cos(\pi \rho)\bigr) & s \ge s_{\mathrm{warm}}
+\end{cases}
+\qquad
+\rho = \frac{s - s_{\mathrm{warm}}}{s_{\mathrm{total}} - s_{\mathrm{warm}}}
+$$
 
-where progress = (step - warmup_steps) / (total_steps - warmup_steps)
-```
+where:
+
+- $s$ — the current optimizer step; $s_{\mathrm{warm}}$ — the warmup step count; $s_{\mathrm{total}}$ — total steps.
+- $\mathrm{lr}_{\mathrm{base}}$ — the peak learning rate reached at the end of warmup (`base_lr`, `3e-4`).
+- $\mathrm{lr}_{\min}$ — the floor the cosine decays to (`min_lr`, `0.0`).
+- $\rho \in [0, 1]$ — fractional progress through the post-warmup phase.
 
 with `warmup_frac = 0.05` (5% of total steps), `base_lr = 3e-4`,
 and `min_lr = 0.0` (cosine decays to zero by the final step).
@@ -696,15 +732,16 @@ How raw logits become deployment-ready predictions.
 > sigmoid + threshold + temperature scaling lives here. The
 > visual-interpretation half (how to read a reliability diagram,
 > what a "well-calibrated S-curve" looks like, common visual
-> misreadings) lives in `egm-viewer/docs/usage.md` (still to be
-> written); it'll cross-link back here for the math.
+> misreadings) lives in the egm-studio figure-reading guide
+> (`egm-studio/docs/usage.md`), which cross-links back here for the
+> math.
 
 ### 4.1 Sigmoid + threshold
 
-The model emits a logit `z`; the binary probability is `p = σ(z)
-= 1 / (1 + e⁻ᶻ)`; the hard prediction at threshold `τ` is
-`ŷ = 𝟙[p ≥ τ]` with `τ = decision.threshold` from the metadata
-sidecar (v1 default `0.5`).
+The model emits a logit $z$; the binary probability is
+$p = \sigma(z) = 1/(1 + e^{-z})$; the hard prediction at threshold
+$\tau$ is $\hat{y} = \mathbf{1}[\,p \ge \tau\,]$ with $\tau$ =
+`decision.threshold` from the metadata sidecar (v1 default `0.5`).
 
 **Why ship raw logits in the predictions bank.** The eval CLI
 stamps `pred_logits` (not just `label_prob`) on every trace so
@@ -728,32 +765,45 @@ Modern neural networks (especially BCE-trained ones) tend to be
 class is systematically higher than the empirical frequency of
 being correct at that probability level (Guo et al. 2017, ICML).
 Temperature scaling is the simplest post-hoc fix: pick a single
-positive scalar `T` and replace `p = σ(z)` with `p = σ(z / T)`.
-Properties:
+positive scalar $T$ and replace $p = \sigma(z)$ with
+$p = \sigma(z/T)$. Properties:
 
-- **Monotonic in logits.** `σ(z/T)` preserves the ordering of
+- **Monotonic in logits.** $\sigma(z/T)$ preserves the ordering of
   samples by logit, so AUROC and rank-based metrics are
   *unchanged*. Only calibration-quality metrics (ECE, reliability)
-  and any threshold-dependent decision at `τ ≠ 0.5` actually
+  and any threshold-dependent decision at $\tau \ne 0.5$ actually
   shift.
-- **One parameter.** `T > 1` softens overconfident predictions;
-  `T < 1` sharpens underconfident ones; `T = 1` is identity.
-- **Convex NLL.** The fit objective is convex in `1/T` for
+- **One parameter.** $T > 1$ softens overconfident predictions;
+  $T < 1$ sharpens underconfident ones; $T = 1$ is identity.
+- **Convex NLL.** The fit objective is convex in $1/T$ for
   typical logit distributions, so a bounded scalar minimizer finds
   the optimum reliably.
 
 **Fitting `T`.** The export CLI's calibration step minimizes
 binary NLL on a held-out labeled bank:
 
-```
-T̂ = argmin_T  (1/N) · Σᵢ [ log(1 + exp(zᵢ / T)) - yᵢ · zᵢ / T ]
-```
+$$
+\hat{T} = \operatorname*{arg\,min}_{T}\; \frac{1}{N} \sum_{i=1}^{N} \Bigl[ \log\bigl(1 + e^{z_i / T}\bigr) - y_i \frac{z_i}{T} \Bigr]
+$$
+
+where:
+
+- $\hat{T}$ — the fitted temperature scalar.
+- $T$ — the temperature being optimized (see the properties above for its $T \gtrless 1$ behavior).
+- $z_i$, $y_i$ — the held-out logit and label for trace $i$; the same binary-NLL objective as the loss, now over $z_i / T$.
+- $N$ — the number of traces in the held-out calibration bank.
 
 `scipy.optimize.minimize_scalar` with `method='bounded'` over
 `bounds = (0.05, 20.0)` (the bracket exists so a numerical
 pathology — say, all-zero logits — produces a clear error rather
 than a silent extreme). The fitted optimum for a healthy v1 model
 typically lands in `[1.0, 3.0]`.
+
+**Worked example.** A trace with logit $z = 2.0$ has raw confidence
+$\sigma(2.0) = 0.881$. If the fit returns $\hat{T} = 2.0$, the
+deployed probability becomes $\sigma(2.0 / 2.0) = \sigma(1.0) = 0.731$
+— same ranking, but pulled toward $0.5$, which is what repairs an
+overconfident model's calibration.
 
 **Why bake `T` into the ONNX graph.** The deployment graph emits
 `logits / T` directly (`CalibratedModel.forward = base(x) / T`
@@ -789,25 +839,32 @@ dict to stdout. Implementations are torchmetrics primitives.
 > **About this section:** the math + operational guidance for each
 > metric lives here. Plot-reading conventions for the corresponding
 > visualizations (ROC curves, PR curves, reliability diagrams,
-> confusion matrices) live in `egm-viewer/docs/usage.md` (still to
-> be written); it'll cross-link back here for derivations.
+> confusion matrices) live in the egm-studio figure-reading guide
+> (`egm-studio/docs/usage.md`), which cross-links back here for the
+> derivations.
 
-The full set of confusion counts at threshold `τ` is:
+The full set of confusion counts at threshold $\tau$ is:
 
-```
-TP = Σᵢ 𝟙[pᵢ ≥ τ] · 𝟙[yᵢ = 1]    (true positives)
-FP = Σᵢ 𝟙[pᵢ ≥ τ] · 𝟙[yᵢ = 0]    (false positives)
-TN = Σᵢ 𝟙[pᵢ < τ] · 𝟙[yᵢ = 0]    (true negatives)
-FN = Σᵢ 𝟙[pᵢ < τ] · 𝟙[yᵢ = 1]    (false negatives)
-```
+$$
+\begin{aligned}
+\mathrm{TP} &= \sum_{i=1}^{N} \mathbf{1}[\,p_i \ge \tau\,]\,\mathbf{1}[\,y_i = 1\,] & \text{(true positives)} \\
+\mathrm{FP} &= \sum_{i=1}^{N} \mathbf{1}[\,p_i \ge \tau\,]\,\mathbf{1}[\,y_i = 0\,] & \text{(false positives)} \\
+\mathrm{TN} &= \sum_{i=1}^{N} \mathbf{1}[\,p_i < \tau\,]\,\mathbf{1}[\,y_i = 0\,] & \text{(true negatives)} \\
+\mathrm{FN} &= \sum_{i=1}^{N} \mathbf{1}[\,p_i < \tau\,]\,\mathbf{1}[\,y_i = 1\,] & \text{(false negatives)}
+\end{aligned}
+$$
 
-with `N = TP + FP + TN + FN`. Every threshold-dependent metric
-below is a function of these four counts at the configured `τ`.
+where $p_i = \sigma(z_i)$ is the predicted probability, $y_i$ the
+label, and $\mathbf{1}[\cdot]$ the indicator (§Notation). With
+$N = \mathrm{TP} + \mathrm{FP} + \mathrm{TN} + \mathrm{FN}$, every
+threshold-dependent metric below is a function of these four counts
+at the configured $\tau$.
 
 ### 5.1 AUROC
 
-The ROC curve plots `TPR = TP / (TP + FN)` against `FPR = FP /
-(FP + TN)` as `τ` sweeps from 1 to 0. AUROC is the area under
+The ROC curve plots $\mathrm{TPR} = \mathrm{TP}/(\mathrm{TP} + \mathrm{FN})$
+against $\mathrm{FPR} = \mathrm{FP}/(\mathrm{FP} + \mathrm{TN})$ as
+$\tau$ sweeps from 1 to 0. AUROC is the area under
 that curve. Equivalent definition: AUROC is the probability that a
 uniformly-random positive sample receives a higher logit than a
 uniformly-random negative sample (Mann-Whitney U).
@@ -833,12 +890,26 @@ small datasets), AUROC is the most stable per-epoch signal.
 
 All four are threshold-dependent functions of the confusion counts:
 
-```
-Precision = TP / (TP + FP)                   "of the positives I called, how many were right"
-Recall    = TP / (TP + FN)                   "of the actual positives, how many did I catch"
-F1        = 2 · P · R / (P + R)              harmonic mean of precision + recall
-Accuracy  = (TP + TN) / N                    fraction of correct predictions
-```
+$$
+\begin{aligned}
+\mathrm{Precision} &= \frac{\mathrm{TP}}{\mathrm{TP} + \mathrm{FP}}
+  && \text{of the positives I called, how many were right} \\
+\mathrm{Recall} &= \frac{\mathrm{TP}}{\mathrm{TP} + \mathrm{FN}}
+  && \text{of the actual positives, how many did I catch} \\
+F_1 &= \frac{2 \cdot \mathrm{Precision} \cdot \mathrm{Recall}}{\mathrm{Precision} + \mathrm{Recall}}
+  && \text{harmonic mean of precision and recall} \\
+\mathrm{Accuracy} &= \frac{\mathrm{TP} + \mathrm{TN}}{N}
+  && \text{fraction of correct predictions}
+\end{aligned}
+$$
+
+**Worked example.** From confusion counts $\mathrm{TP} = 30$,
+$\mathrm{FP} = 10$, $\mathrm{TN} = 45$, $\mathrm{FN} = 15$
+($N = 100$): $\mathrm{Precision} = 30/40 = 0.75$,
+$\mathrm{Recall} = 30/45 = 0.667$,
+$F_1 = 2(0.75)(0.667)/(0.75 + 0.667) = 0.706$, and
+$\mathrm{Accuracy} = 75/100 = 0.75$. Recall lags precision here —
+the model misses a third of the true positives.
 
 Implementation note: torchmetrics' binary versions accept raw
 logits + a threshold, apply sigmoid + threshold internally, and
@@ -880,15 +951,28 @@ equal-width buckets `[0, 1/n_bins), [1/n_bins, 2/n_bins), …`. For
 each bucket compute the mean predicted confidence and the mean
 correctness; ECE is the weighted absolute difference:
 
-```
-ECE = Σ_b  (|S_b| / N) · | conf(S_b) - acc(S_b) |
-```
+$$
+\mathrm{ECE} = \sum_{b=1}^{B} \frac{|S_b|}{N} \, \bigl| \operatorname{conf}(S_b) - \operatorname{acc}(S_b) \bigr|
+$$
 
-where `S_b` is the set of samples in bucket `b`, `conf(S_b)` is
-the mean predicted confidence over `S_b`, and `acc(S_b)` is the
-fraction of correct predictions in `S_b`. v1 uses `n_bins = 10`
-and the L1 norm (matches Guo §2). torchmetrics'
+where:
+
+- $B$ — the number of equal-width probability bins (`n_bins`, default 10).
+- $S_b$ — the set of samples whose predicted confidence falls in bin $b$; $|S_b|$ its size.
+- $N$ — the total number of samples.
+- $\operatorname{conf}(S_b)$ — the mean predicted confidence over $S_b$.
+- $\operatorname{acc}(S_b)$ — the fraction of correct predictions in $S_b$.
+
+v1 uses the L1 norm, matching Guo §2; torchmetrics'
 `BinaryCalibrationError` implements this directly.
+
+**Worked example.** Suppose the bin $[0.8, 0.9)$ holds $|S_b| = 40$
+of $N = 200$ samples, with mean confidence
+$\operatorname{conf}(S_b) = 0.85$ but mean accuracy
+$\operatorname{acc}(S_b) = 0.70$. That bin contributes
+$\tfrac{40}{200}\,\lvert 0.85 - 0.70 \rvert = 0.2 \times 0.15 = 0.03$
+to the ECE sum — a 15-point overconfidence in a bin holding a fifth
+of the data. Summing every bin's contribution gives the scalar ECE.
 
 ECE is "confidence in the predicted class" — for a sample where
 the model predicted negative (probability < `τ`), the confidence
