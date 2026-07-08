@@ -69,10 +69,13 @@ coverage.xml
 *.ckpt
 *.safetensors
 
-data/
-banks/
-checkpoints/
-exports/
+# Root-anchored so these only ignore top-level generated-output dirs and do
+# NOT swallow same-named source packages (e.g. src/.../data/, the training-data
+# layer absorbed from egm-data in Refactor Step 8).
+/data/
+/banks/
+/checkpoints/
+/exports/
 runs/
 logs/
 mlruns/
