@@ -72,6 +72,8 @@ def test_validate_artifact_id_rejects_malformed_string() -> None:
         validate_artifact_id("Not An Id!")
 
 
-def test_validate_artifact_id_rejects_missing_date_segment() -> None:
-    with pytest.raises(ValueError, match="not a valid stable artifact id"):
-        validate_artifact_id("run_v1_5")
+def test_validate_artifact_id_accepts_missing_date_segment() -> None:
+    """egm-contracts v0.5.3 made the ArtifactId date suffix optional — a
+    hand-set id without a trailing ``_YYYY-MM-DD`` is now valid (auto-derived
+    ids still stamp one; user-supplied ids aren't forced to)."""
+    assert validate_artifact_id("run_v1_5") == "run_v1_5"

@@ -58,8 +58,8 @@ classifiers = [
 # myocard-egm-data; the legacy data/ subpackage is gone. h5py is NOT
 # a direct dep — egm-data carries it.
 dependencies = [
-  "myocard-egm-contracts @ git+https://github.com/myocard-labs/egm-contracts.git@v0.5.1",
-  "myocard-egm-data[torch] @ git+https://github.com/myocard-labs/egm-data.git@v0.4.0",
+  "myocard-egm-contracts @ git+https://github.com/myocard-labs/egm-contracts.git@v0.5.3",
+  "myocard-egm-data @ git+https://github.com/myocard-labs/egm-data.git@v0.5.0",
   # myocard-egm-signal ships the temperature-scaling primitive that
   # the export CLI's calibration step calls into. v0.2.0 added the
   # model/temperature_scaling module.
