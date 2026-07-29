@@ -86,6 +86,14 @@ artifacts/
 !tests/fixtures/**
 
 # --------------------------------------------------------------------
+# Local run configs
+# Scratch train/eval/export YAMLs for a specific machine + bank layout.
+# Root-anchored (does not touch any src/ or tests/ subpackage). Configs
+# meant to be shared ship as committed examples under examples/.
+# --------------------------------------------------------------------
+/configs/
+
+# --------------------------------------------------------------------
 # Build / docs
 # --------------------------------------------------------------------
 docs/_build/
