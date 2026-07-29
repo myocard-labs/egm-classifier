@@ -24,7 +24,7 @@ Two notes worth internalizing:
   handled by the std floor instead of dividing by zero. When L == T
   there is no padding and placement is a straight copy.
 
-Noise augmentation is *already baked into the hybrid bank* (each trace
+Noise augmentation is *already baked into the noise-mixed bank* (each trace
 is clean+noise at some SNR), so there is no runtime noise mixing here.
 
 **Scope:** ``TraceTransform`` is for per-call augmentations that vary
