@@ -12,41 +12,86 @@ component-internal.
 
 ## Phase 1.5 — sim-realism
 
-### `zero2one` normalization in train + eval
+Scheduled into the active phase. Item-level here; the **ordered steps, complexity scores, and
+estimates live in [`phase_1_5_plan.md`](phase_1_5_plan.md)** (ephemeral — deleted at phase
+cleanup, when the shipped work summarizes into [`CHANGELOG.md`](../CHANGELOG.md) and anything
+unfinished drops back here). Issue ids are the phase design doc's:
+`intracardiac-platform/phases/phase_1_5/design.md` §3 (core) and §4 (backlog).
+
+### CLF5 — migrate to egm-contracts v0.6.0
+
+Re-pin egm-contracts v0.6.0 + egm-data v0.5.x and adopt `training_run_record` 1.2 plus the
+v0.6.0 `ClassifierBank` shape at write time, **with current behavior** — the Wave-1 migration,
+deliberately separate from the feature work so a break from the refactor is caught before any
+feature is added. Also drops `label_fn` at the converter boundary (the 2.0 bank carries its own
+int label + `label_names`).
+
+> → Design §3 CLF5 · plan S1–S3. Gates CLF2. Wave 1.
+
+### CLF2 — emit per-split train metrics
+
+Compute metrics on the train split each epoch through a non-augmented, sequential `train_eval`
+loader and record them in `EpochRecord.train_metrics` + `metrics.csv`, so the train/val
+divergence is visible rather than inferred. Folds in best-model (not last-epoch) held-out test
+metrics, and the per-trace split + prediction columns on the predictions bank.
+
+> → Design §3 CLF2 · plan S4–S6. Depends on CLF5 (+ CON3 / DAT3). Wave 2.
+
+### CLF1 — best-epoch selection panel
+
+Replace max-val-AUROC as the sole selection criterion with a panel — **min val-loss (new
+default)**, Brier, MCC, AUROC retained as baseline — writing one checkpoint per criterion so
+their test-time models can be compared, plus SWA/EMA weight averaging as the orthogonal
+"don't pick one epoch" option. Rationale + sources: design §2 **L2**.
+
+> → Design §3 CLF1 · plan S7–S9. Runs study §8.4. Wave 2.
+
+### CLF3 — conventional comparator panel
+
+Two comparator architectures against the MobileViT: a **pure MobileNetV2-1D** (config-only —
+the block list minus the `mobilevit_1d` entries, isolating the attention contribution) and a
+**Res-CNN-LSTM** (`res_block_1d` + `lstm_1d` block types; the family precedented on
+intracardiac EGM, Chen 2022). A shared over-call across families implicates the data, not the
+model. Rationale + sources: design §2 **L3**.
+
+> → Design §3 CLF3 · plan S10–S12. Runs study §8.5. Wave 2.
+
+### `zero2one` normalization in train + eval (B2)
 
 The export CLI already supports `zscore` and `zero2one`; train + eval are hardcoded to
 `zscore` via the `TraceTransform`. Finish the job: add a `normalize` mode
 (`'zscore' | 'zero2one' | 'none'`) to `TraceTransform` (now in `myocard_egm_classifier.data`,
-currently a `znorm` bool), plumb `normalization_scheme` through the train + eval YAML, stamp
-the chosen scheme into the checkpoint `model_meta` (with a back-compat fallback), and
-empirically compare `zero2one` vs `zscore` on the v1 model in `project/investigations/`.
+currently a `znorm` bool), plumb `normalization_scheme` through the train + eval YAML, and stamp
+the chosen scheme into the checkpoint `model_meta` (with a back-compat fallback). The empirical
+`zero2one`-vs-`zscore` comparison is a run, not code — it belongs to §8, not the plan.
 
-> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5.
+> → Design §4 B2 · plan S13.
 
-### Investigation: does activation-peak anchoring help?
+### Run-record cleanups (B14 · B15 · B18)
 
-The v1 synthetic producer always crops each trace to a fixed window centered on the single
-simulated activation peak (`docs/theory.md` §1.3 "activation-peak anchoring"; distinct from
-clinical R-wave anchoring). Whether the network needs this help or could learn the activation
-location itself is an open empirical question with no published intracardiac-EGM-ML answer.
-Two steps: (1) an opt-in producer-side flag in synthetic-egm-pipeline to disable anchoring
-(default on); (2) train v1 on anchored vs unanchored variants of the same sim set and A/B
-compare AUROC / ECE / train-val gap. Possible methods-paper candidate. Phase 2's
-multi-activation sims make anchoring moot, so the pre-Phase-2 window is the time to settle it.
+Three edits riding the `training_run_record` 1.2 bump: record artifact paths **repo-relative**
+rather than absolute (B14); stop writing `hostname` (B15); and stop down-casting
+`HeldOutTest.metrics` once the schema mirrors the val bundle, which also means test metrics are
+taken at the **best** epoch (B18).
 
-> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5. Cross-repo (opt-in
-> flag in synth + the A/B comparison here).
+> → Design §4 B14 / B15 / B18 · plan S2 (+ S6). Ride CLF5.
 
-### Investigation: training-time additive-noise augmentation
+### Progress bar for `egm-class-eval` (B21)
 
-v1 ships no training-time additive noise — the synthetic-egm-pipeline mixer injects
-deployment-realistic IAFDB noise at *producer* time, so a second training-time layer would
-shift that distribution off-target. But some synthetic-data ML groups use it as a regularizer
-even alongside producer-side noise. Two steps: (1) survey the synthetic-biosignal ML
-literature for consistent generalization benefit; (2) if encouraging, add a `TraceTransform`
-augmentation and A/B test.
+The eval loop runs sequentially with no feedback, so a large IAFDB inference bank looks hung on
+an underpowered machine. Wrap it in `tqdm` with a `--no-progress` escape hatch, matching the
+producer pattern.
 
-> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5.
+> → Design §4 B21 · plan S14.
+
+### Moved out of this repo (were listed here pre-planning)
+
+- **Activation-anchoring A/B** — turned out not to be ours. It is a producer-side opt-in flag
+  (**SEP10** in synthetic-egm-pipeline) plus **study §8.9**; both arms are just different
+  training banks, so egm-classifier needs no change. Design §3 SEP10.
+- **Training-time additive-noise augmentation** — deferred out of the phase as **XR1** →
+  [`feature_backlog.md`](../../intracardiac-platform/project/feature_backlog.md) **FB-9**
+  (1.5 already large; low expected effect; both clean and noise runs already diverged).
 
 ## Phase 4 — multi-beat
 
@@ -83,12 +128,6 @@ Today it loads the whole HDF5 signal array into RAM at construction; a chunked /
 may be needed as banks grow (Phase 1.5 pushes synthetic to 300–500 sims; Phase 7 multi-beat +
 3D geometry is larger still).
 
-### Progress bar for `egm-class-eval`
-
-The eval loop runs sequentially with no feedback, so a large IAFDB inference bank looks hung
-on an underpowered machine. Wrap the loop in `tqdm` (with a `--no-progress` escape hatch +
-graceful degradation when tqdm is absent, matching the producer pattern). Low priority.
-
 ### Migrate `torch.onnx.export` to the dynamo path
 
 Export passes `dynamo=False` (legacy TorchScript exporter); PyTorch is moving to the dynamo
@@ -105,11 +144,29 @@ Component-internal; was task #289.
 
 ## Schema bumps to coordinate
 
-None currently planned. The most recent was the egm-contracts v0.5.0 cross-artifact-linkage
-wave (consumed in v0.4.0): `egm_class_model_metadata` → 1.2 (`model_id`) and
-`training_run_record` → 1.1 (`run_id` + `produced_model_id` + `trained_on_bank_id`). No
-follow-up bumps expected unless the `run.json` preprocessing extension (Backlog) needs new
-`training_run_record` fields.
+**Inbound: the Phase-1.5 egm-contracts v0.6.0 + egm-data v0.5.x wave.** Two of its six schema
+groups are written by this repo, so CLF5 adopts them and CLF2 builds on them:
+
+- **`training_run_record` 1.1 → 1.2** (P1) — adds `EpochRecord.train_metrics` (**optional in
+  schema, required on write** once CLF2 ships, which is what lets CLF5 migrate without it);
+  aligns `HeldOutTest.metrics` to the val bundle (B18); drops `hostname` (B15); relative paths
+  (B14). Needs egm-data's `make_epoch_record` to gain a `train_metrics=None` parameter —
+  confirmed shipping in DAT3.
+- **`classifier_predictions` + `ArtifactId`** (P3) — per-trace `split` + `prediction` columns on
+  the egm-data `ClassifierBank`, and role-prefix validation on `ArtifactId` against
+  egm-contracts' `roles.json` (B16), which `ids.py` adopts.
+
+Also pending in the same wave, and **blocking the `metrics.csv` half of CLF2**:
+`training_metrics.schema.json` is `additionalProperties: false`, so it must gain the six
+`train_*` columns or it will reject the new CSV outright.
+
+The in-flight field-level spec is the **Proposed changes** section of
+`intracardiac-platform/project/cross_artifact_linkage_design.md` — the canonical §1–§3 there
+reflect only what has already shipped.
+
+Previously: the egm-contracts v0.5.0 cross-artifact-linkage wave (consumed in v0.4.0) —
+`egm_class_model_metadata` → 1.2 (`model_id`) and `training_run_record` → 1.1 (`run_id` +
+`produced_model_id` + `trained_on_bank_id`).
 
 ## Known issues
 
