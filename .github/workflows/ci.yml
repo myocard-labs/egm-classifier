@@ -25,7 +25,11 @@ jobs:
           cache: pip
 
       - name: Install ruff
-        run: pip install "ruff>=0.6.0"
+        # Pinned to the fleet ruff version — must match .pre-commit-config.yaml's
+        # rev, so the pre-PR lint in project/pr_checklist.md actually predicts CI.
+        # Unpinned, CI resolved a newer ruff than pre-commit and failed on files
+        # nobody had touched. Bump both together, fleet-wide.
+        run: pip install "ruff==0.15.17"
 
       - name: ruff check
         run: ruff check .
