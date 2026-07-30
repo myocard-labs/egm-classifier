@@ -44,7 +44,23 @@ default)**, Brier, MCC, AUROC retained as baseline — writing one checkpoint pe
 their test-time models can be compared, plus SWA/EMA weight averaging as the orthogonal
 "don't pick one epoch" option. Rationale + sources: design §2 **L2**.
 
-> → Design §3 CLF1 · plan S7–S9. Runs study §8.4. Wave 2.
+**ECE is explicitly not selectable** (binning-dependent and biased — select on a proper scoring
+rule, keep ECE as a diagnostic), and ECE itself moves to **equal-mass / adaptive bins**, since
+equal-width binning collapses on a saturated predictive distribution and would make the §8.5
+calibration comparison unreadable.
+
+> → Design §3 CLF1 · plan S7–S9 (+ S7b, from CL-073). Runs study §8.4. Wave 2.
+
+### CLF6 (provisional id) — multi-seed training + seed-variance aggregation
+
+Run each training over a list of seeds and report per-metric spread, so a difference between
+architectures (§8.5) or between best-epoch criteria (§8.4) can be judged against seed noise
+instead of read off a single run. Each seed is an ordinary `training_run_record` with its own
+stable ids — no schema change; the same seed list across arms is what makes the comparison
+paired. Cross-arm paired statistics belong to the study / STU3, not to a training run.
+
+> → Added by the §8 study audit (CL-073); id provisional pending the project-lead ·
+> plan S9b–S9c. Serves §8.4 / §8.5 / §8.6 / §8.9. Wave 2.
 
 ### CLF3 — conventional comparator panel
 

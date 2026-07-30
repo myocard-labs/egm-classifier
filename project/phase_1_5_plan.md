@@ -2,8 +2,8 @@
 
 **Repo:** egm-classifier · **Phase:** 1.5
 **Phase design doc:** `intracardiac-platform/phases/phase_1_5/design.md`
-**Status:** planning · **Progress:** 0/15 steps done
-**Repo estimate:** **20 points · ~20–42 h active** (cold-start estimate by analogy — the
+**Status:** planning · **Progress:** 0/18 steps done
+**Repo estimate:** **23 points · ~26–53 h active** (cold-start estimate by analogy — the
 `estimation_ledger.csv` is empty, so per-task-type rates don't exist yet and the ranges are
 deliberately wide. Per-issue breakdown in [Effort tracking](#effort-tracking).)
 
@@ -18,7 +18,8 @@ Core §3 issues **CLF5 · CLF2 · CLF1 · CLF3** and the §4 backlog items this 
 |---|---|---|
 | **CLF5** *(Wave 1, migration)* | Re-pin egm-contracts v0.6.0 + egm-data v0.5.x; adopt `training_run_record` 1.2 + the v0.6.0 `ClassifierBank` shape at write time, **current behavior** | S1–S3 |
 | **CLF2** *(← CLF5)* | Emit per-split **train** metrics each epoch; best-epoch (not last-epoch) held-out test metrics; per-trace split + prediction on the predictions bank | S4–S6 |
-| **CLF1** | Best-epoch **selection panel** — min val-loss (new default) · Brier · MCC · AUROC baseline — plus SWA/EMA weight averaging | S7–S9 |
+| **CLF1** | Best-epoch **selection panel** — min val-loss (new default) · Brier · MCC · AUROC baseline (**not ECE**) — plus SWA/EMA weight averaging, and ECE on adaptive bins | S7–S9 |
+| **CLF6** *(provisional id)* | **Multi-seed training + seed-variance aggregation** — so a §8.4/§8.5 gap inside seed noise isn't read as a result | S9b–S9c |
 | **CLF3** | Comparator panel — pure MobileNetV2-1D (config-only) + Res-CNN-LSTM (`res_block_1d` + `lstm_1d` blocks) | S10–S12 |
 | **B2** | `zero2one` normalization in train + eval (today: export-only) | S13 |
 | **B14** | Relative artifact paths in the run record | rides S2 |
@@ -48,8 +49,11 @@ Four local decisions the steps depend on. The fifth item is an escalation, not a
   isn't enough. `train.select_metrics: [val_loss, brier, mcc, auroc]` writes `best_<criterion>.pt`
   alongside the primary `best.pt` (a copy of the first entry, so every existing `best.pt` consumer —
   eval, export, the tests — keeps working unchanged). Each criterion carries a **direction**
-  (minimize for `val_loss`/`brier`/`ece`, maximize for the rest); `select_metric` today is
-  maximize-only.
+  (minimize for `val_loss`/`brier`, maximize for the rest); `select_metric` today is maximize-only.
+  **`ece` is deliberately NOT selectable** (CL-073): it is binning-dependent and biased, so
+  selecting on it optimises an artifact of the binning. Selection uses a **proper scoring rule**
+  (BCE / Brier); ECE + reliability stay as **diagnostics**. `select_metrics` rejects `ece` with a
+  message saying so, rather than silently accepting a bad criterion.
 - **Eval re-derives the split rather than being told it (S3).** The folded-in predictions work
   (design §4's *"CLF4b"* — a sub-item of the **retired** CLF4, not of CLF5; see the decisions log)
   wants a per-trace
@@ -148,14 +152,30 @@ the three threads (CLF2 → CLF1, CLF3, backlog) are independent and can be reor
 
 #### S7 — Brier + MCC + val-loss as selectable criteria ☐ (1–2 h)
 - **Change:** `metrics.py:binary_metrics` gains `brier` and `mcc`; a criterion table maps each name
-  to its **direction**, with `val_loss` selectable as a pseudo-metric. MCC uses
+  to its **direction**, with `val_loss` selectable as a pseudo-metric and **`ece` explicitly
+  excluded** (CL-073 — see the design note). MCC uses
   `torchmetrics.classification.BinaryMatthewsCorrCoef` (verified present at the pinned
   torchmetrics 1.9); **Brier has no torchmetrics binary class** — it's computed directly as
   `mean((sigmoid(logits) − labels)²)`, which is the whole definition and keeps it a proper scoring
   rule with no extra dependency.
 - **Verify:** `test_metrics.py` — hand-calculated Brier/MCC on the existing perfect/worst/
-  known-confusion fixtures; direction table asserts min-vs-max per criterion.
+  known-confusion fixtures; direction table asserts min-vs-max per criterion; `select_metrics:
+  [ece]` raises at config-load with the "not a proper scoring rule" message.
 - **Depends on:** none.
+
+#### S7b — ECE on adaptive (equal-mass) bins ☐ (1.5–3 h)
+- **Change:** ECE + the reliability table move to **equal-mass / quantile bins (~10–15)** as the
+  primary estimator, with **15 equal-width** bins retained as a secondary reported alongside
+  (CL-073). Today both come from `BinaryCalibrationError(n_bins, norm="l1")` and
+  `_reliability_bins`, which are equal-width — on a saturated IAFDB predictive distribution nearly
+  every sample lands in one bin, so equal-width ECE is dominated by a single bin and the reliability
+  diagram is mostly empty. Equal-mass binning is what makes the T5/§8.5 calibration comparison
+  readable. Both numbers are emitted (`ece`, `ece_equal_width`) so nothing that read the old key
+  loses its series.
+- **Verify:** `test_metrics.py` — on a deliberately skewed predictive distribution, equal-mass bins
+  are all non-empty and equal-width are not; a uniform distribution makes the two agree to within
+  tolerance (the sanity check that the estimator wasn't broken in the process).
+- **Depends on:** S7. *Feeds the §8.5 saturation metrics and STU3's reliability rendering.*
 
 #### S8 — Multi-criterion checkpointing ☐ (2.5–5 h)
 - **Change:** `TrainConfig.select_metrics: tuple[str, ...]` (default `("val_loss",)` — the new
@@ -175,6 +195,36 @@ the three threads (CLF2 → CLF1, CLF3, backlog) are independent and can be reor
 - **Verify:** `test_train.py` — an averaged checkpoint is written, loads, and produces finite
   metrics; the averaged weights differ from the final-epoch weights.
 - **Depends on:** S8.
+
+### CLF6 *(provisional id — see decisions log)* — multi-seed training + seed-variance aggregation
+
+> _Serves **§8.4 · §8.5 · §8.6 · §8.9** — an architecture or best-epoch-criterion gap that sits
+> inside seed noise is not a result. Added from CL-073 after the §8 study audit; **no schema
+> change** — each seed is an ordinary `training_run_record`._
+
+#### S9b — Seed loop with per-seed artifact ids ☐ (2–4 h)
+- **Change:** `train.seeds: [int, ...]` (single `seed:` stays as the one-element form); the CLI loops
+  training over the list, one full run per seed. The subtlety is **artifact identity**: `run_id` /
+  `produced_model_id` derive from `output.run_name`, so N seeds would collide on one id. Each seed
+  gets a suffixed descriptor (`run_v1_5_x_seed0`, …) and its own `checkpoint_dir` subdirectory, so
+  every seed is an independently addressable, manifest-curatable artifact. Same seed list across
+  arms is what makes §8.4/§8.5's **paired** comparison possible, so the list is recorded in each run
+  record.
+- **Verify:** `test_train.py` — a 2-seed run writes two run records with distinct `run_id`s, two
+  checkpoint dirs, and reproduces identical metrics when re-run with the same list.
+- **Depends on:** none (independent of the criterion panel; do after S8 to avoid churn on the same
+  file).
+
+#### S9c — Seed-variance aggregation ☐ (1.5–3 h)
+- **Change:** after the loop, emit a compact per-metric aggregate across seeds — n, mean, sd, min,
+  max — to stdout and as a small `seeds_summary.json` beside the per-seed dirs. Deliberately **not**
+  a new schema: it is a derived convenience over the N run records, which stay the source of truth.
+- **Verify:** `test_train.py` — the summary's per-metric mean/sd match a hand computation over the
+  per-seed run records.
+- **Depends on:** S9b.
+- **Scope boundary:** I emit per-arm spread. The **paired cross-arm statistics** (does criterion A
+  beat B once seed noise is accounted for?) compare *different training runs* and belong to the
+  study / STU3, not to a single `egm-class-train` invocation — flagged in my CL reply.
 
 ### CLF3 — conventional comparator panel *(study §8.5)*
 
@@ -266,14 +316,20 @@ Cold start: the ledger has no rows, so these are **analogy estimates with wide r
 |---|---|---|---|
 | CLF5 | schema-migration | M (3) | 3.5–7.5 h |
 | CLF2 | pipeline | M (3) | 3–6.5 h |
-| CLF1 | pipeline | L (5) | 5.5–11 h |
+| CLF1 | pipeline | L (5) | 7–14 h |
+| CLF6 *(provisional id)* | pipeline | M (3) | 3.5–7 h |
 | CLF3 | pipeline | M (3) | 4.5–9 h |
 | B2 | pipeline | S (2) | 2–4 h |
 | B14 | pipeline | XS (1) | *rides S2* |
 | B15 | pipeline | XS (1) | *rides S2* |
 | B21 | pipeline | XS (1) | 0.5–1.5 h |
 | docs / phase exit | docs | XS (1) | 1–2 h |
-| **Repo total** | | **20 pts** | **~20–42 h** |
+| **Repo total** | | **23 pts** | **~26–53 h** |
+
+**Changed 2026-07-30 by the §8 study audit (CL-073):** **+3 pts / +6–11 h.** CLF1 absorbed the
+new **S7b** adaptive-ECE step (5 pts unchanged — the panel's shape didn't grow, but its hours did,
+5.5–11 → 7–14); **CLF6** is net-new (M, 3 pts). CLF1 stays L rather than going XL because S7b is
+mechanical (a binning change with a clear test), not novel.
 
 Widest ranges, in order: **CLF3** (ONNX export of an LSTM is unproven here), **CLF1** (SWA/EMA is
 net-new to this codebase), **CLF5** (depends on how much the v0.6.0 restructure ripples past the
@@ -333,6 +389,21 @@ schemas this repo actually writes).
 - **2026-07-29** — **Log write discipline changed (CL-025):** post by appending at EOF with
   `cat >> ... <<'EOF'`, never a whole-file rewrite; **only the project-lead edits or resolves existing
   entries**. Don't self-resolve — a resolution comes back as a new entry.
+- **2026-07-30** — **§8 study audit lands two changes (CL-073).** (1) **ECE is no longer a selectable
+  criterion** — binning-dependent and biased, so selection uses a proper scoring rule (BCE/Brier) and
+  ECE stays a diagnostic; this repo's plan had explicitly listed `ece` as a minimize-direction
+  criterion, so it was a real defect, now fixed in the design note + S7. (2) ECE moves to
+  **equal-mass/adaptive bins** (new **S7b**) — which matters more than it sounds: on the saturated
+  IAFDB predictive distribution, equal-width binning puts nearly every sample in one bin, so the
+  headline calibration number and the reliability diagram were both going to be near-useless for the
+  §8.5 saturation comparison. (3) **Multi-seed training + spread aggregation** is net-new work
+  (S9b–S9c). §8.9's positional probe needs **no** change here — it uses existing inference.
+  **Cost: +3 pts, +6–11 h** (23 pts, 26–53 h).
+- **2026-07-30** — **`CLF6` is a provisional, self-minted id — needs the project-lead's blessing.**
+  Multi-seed serves §8.4/§8.5/§8.6/§8.9, so it belongs to no single existing issue, and CL-073 folded
+  it in without minting one. Same situation as the Wave-1 slice that became CLF5. Raised in my CL
+  reply; **if the project-lead assigns a different number, rename here** — ids are append-only and
+  key the ledger, so it must not be invented unilaterally and left.
 - **2026-07-28** — `roadmap.md`'s Phase 1.5 cluster predates the design doc: the anchoring
   investigation is now SEP10 + study §8.9 (**no egm-classifier change**) and train-time noise
   augmentation is XR1 → FB-9. Corrected at S15 rather than now, so the roadmap and CHANGELOG move
