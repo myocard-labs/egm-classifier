@@ -104,7 +104,7 @@ def train_one_epoch(
     loss_fn: nn.Module,
     device: torch.device,
     config: TrainConfig,
-    scaler: torch.amp.GradScaler | None,  # type: ignore[name-defined]
+    scaler: torch.amp.GradScaler | None,
     epoch: int,
     total_epochs: int,
     global_step: int,
@@ -136,9 +136,7 @@ def train_one_epoch(
         _set_lr(optimizer, lr)
         optimizer.zero_grad(set_to_none=True)
 
-        with torch.amp.autocast(  # type: ignore[attr-defined]
-            device_type=device.type, dtype=amp_dtype, enabled=config.amp
-        ):
+        with torch.amp.autocast(device_type=device.type, dtype=amp_dtype, enabled=config.amp):
             logits = model(signals)  # [B, num_outputs]
             loss = loss_fn(logits, targets)
 
@@ -224,7 +222,7 @@ def train(
         betas=config.betas,
     )
     use_scaler = config.amp and config.amp_dtype == "fp16" and device.type == "cuda"
-    scaler = torch.amp.GradScaler("cuda") if use_scaler else None  # type: ignore[attr-defined]
+    scaler = torch.amp.GradScaler("cuda") if use_scaler else None
 
     steps_per_epoch = len(loaders.train)
     total_steps = steps_per_epoch * config.epochs

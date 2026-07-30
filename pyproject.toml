@@ -68,7 +68,12 @@ dependencies = [
   # arrives transitively via egm-contracts, but we import it by name so
   # we declare it.
   "pydantic>=2",
-  "torch>=2.1",
+  # >=2.4 because training/train.py uses the device-generic AMP API —
+  # torch.amp.GradScaler("cuda") — which landed in 2.4, when the old
+  # torch.cuda.amp.GradScaler was deprecated. The previous >=2.1 floor was
+  # wrong: on 2.1-2.3 the fp16-on-CUDA training path raises AttributeError.
+  # CPU-only CI never hit it, so the floor error stayed masked.
+  "torch>=2.4",
   # Metrics primitives (BinaryAUROC, BinaryAccuracy, BinaryStatScores,
   # BinaryCalibrationError, ...). We deliberately use torchmetrics' batch-
   # closed-form implementations rather than hand-rolling sigmoid + ROC +
